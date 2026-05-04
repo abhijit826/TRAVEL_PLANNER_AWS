@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import axios from 'axios';
+import api from '../utils/api';
 import {
   CreditCard,
   FileText,
@@ -67,10 +67,7 @@ const TravelWallet: React.FC = () => {
   const fetchDocuments = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem('token'); // Assuming JWT token from auth
-      const response = await axios.get('http://localhost:5000/api/travel-wallet/documents', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await api.get('/api/travel-wallet/documents');
       setDocuments(response.data);
     } catch (err) {
       setError('Failed to fetch documents');
@@ -168,12 +165,7 @@ const TravelWallet: React.FC = () => {
     }
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.post(
-        'http://localhost:5000/api/travel-wallet/documents',
-        newDocument,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = await api.post('/api/travel-wallet/documents', newDocument);
       setDocuments([...documents, response.data]);
       setSelectedDocument(response.data);
       resetForm();
@@ -214,11 +206,9 @@ const TravelWallet: React.FC = () => {
     }
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.put(
-        `http://localhost:5000/api/travel-wallet/documents/${selectedDocument._id}`,
-        updatedDocument,
-        { headers: { Authorization: `Bearer ${token}` } }
+      const response = await api.put(
+        `/api/travel-wallet/documents/${selectedDocument._id}`,
+        updatedDocument
       );
       const updatedDocs = documents.map((doc) =>
         doc._id === selectedDocument._id ? response.data : doc
@@ -236,10 +226,7 @@ const TravelWallet: React.FC = () => {
     if (!selectedDocument) return;
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`http://localhost:5000/api/travel-wallet/documents/${selectedDocument._id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await api.delete(`/api/travel-wallet/documents/${selectedDocument._id}`);
       const updatedDocs = documents.filter((doc) => doc._id !== selectedDocument._id);
       setDocuments(updatedDocs);
       setSelectedDocument(null);

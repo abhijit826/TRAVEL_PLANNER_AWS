@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import api from '../../utils/api';
 import { useNavigate } from 'react-router-dom';
 
 const AuthPage: React.FC = () => {
@@ -12,9 +12,9 @@ const AuthPage: React.FC = () => {
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const url = isSignUp ? 'http://localhost:5000/api/auth/register' : 'http://localhost:5000/api/auth/login';
+      const endpoint = isSignUp ? '/api/auth/register' : '/api/auth/login';
       const data = isSignUp ? { name, email, password } : { email, password };
-      const response = await axios.post(url, data);
+      const response = await api.post(endpoint, data);
       localStorage.setItem('token', response.data.token);
       navigate('/'); // Redirect to the homepage
     } catch (error) {

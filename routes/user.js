@@ -3,55 +3,48 @@ const router = express.Router();
 const User = require('../models/User');
 const { protect } = require('../middleware/authMiddleware');
 
-// Create a new user
+// ── POST /api/users  (public — create user directly, legacy endpoint) ─────────
 router.post('/users', async (req, res) => {
+  const { name, email, password } = req.body;
   try {
-    const user = new User(req.body);
-    await user.save();
+    const user = await User.create({ name, email, password });
     res.status(201).json(user);
   } catch (error) {
+    if (error.code === 'DUPLICATE_EMAIL') {
+      return res.status(400).json({ error: 'User already exists' });
+    }
     res.status(400).json({ error: error.message });
   }
 });
 
-// Get user profile by ID
+// ── GET /api/users/:id  (public — get user by ID) ────────────────────────────
 router.get('/users/:id', async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
+    if (!user) return res.status(404).json({ error: 'User not found' });
     res.json(user);
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 });
 
-// Get authenticated user profile
+// ── GET /api/profile  (protected) ────────────────────────────────────────────
 router.get('/profile', protect, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select('-password');
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-    res.json(user);
+    // req.user is already set by the protect middleware (without password)
+    if (!req.user) return res.status(404).json({ message: 'User not found' });
+    res.json(req.user);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-// Update authenticated user profile
+// ── PATCH /api/profile  (protected) ──────────────────────────────────────────
 router.patch('/profile', protect, async (req, res) => {
+  const { name, email } = req.body;
   try {
-    const { name, email } = req.body;
-    const user = await User.findById(req.user.id);
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-    if (name) user.name = name;
-    if (email) user.email = email;
-    const updatedUser = await user.save();
-    res.json(updatedUser);
+    const updated = await User.update(req.user.userId, { name, email });
+    res.json(updated);
   } catch (error) {
     res.status(400).json({ message: error.message });
   }

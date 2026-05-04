@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Edit, Save, ArrowLeft } from 'lucide-react';
-import axios from 'axios';
+import api from '../utils/api';
 import { useNavigate } from 'react-router-dom';
 
 const EditProfile: React.FC = () => {
@@ -15,14 +15,7 @@ const EditProfile: React.FC = () => {
       try {
         setIsLoading(true);
         setError(null);
-        const token = localStorage.getItem('token');
-        if (!token) {
-          navigate('/auth');
-          return;
-        }
-        const response = await axios.get('http://localhost:5000/api/profile', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const response = await api.get('/api/profile');
         setUser({ name: response.data.name, email: response.data.email });
       } catch (error) {
         console.error('Error fetching user profile:', error);
@@ -32,7 +25,7 @@ const EditProfile: React.FC = () => {
       }
     };
     fetchUserProfile();
-  }, [navigate]);
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -42,11 +35,7 @@ const EditProfile: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const token = localStorage.getItem('token');
-      if (!token) throw new Error('No token found');
-      await axios.patch('http://localhost:5000/api/profile', user, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await api.patch('/api/profile', user);
       alert('Profile updated successfully!');
       navigate('/profile');
     } catch (error) {

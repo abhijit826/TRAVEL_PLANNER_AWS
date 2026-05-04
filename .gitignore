@@ -22,3 +22,12 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environment variables — NEVER commit secrets
+.env
+.env.*
+!.env.example
+
+# AWS CLI installer (large binary, not needed in repo)
+awscliv2.zip
+aws/

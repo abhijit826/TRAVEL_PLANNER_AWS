@@ -1,31 +1,37 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plane, Calendar, MapPin, Plus, Trash2 } from 'lucide-react';
-import axios from 'axios';
+import api from '../utils/api';
 import { Link } from 'react-router-dom';
-import jsPDF from 'jspdf'; // For frontend PDF mocking (optional)
+
+// Trip type matching DynamoDB model
+interface Trip {
+  _id: string;
+  userId: string;
+  destination: string;
+  duration: string;
+  budget: string;
+  companions: string;
+  activities: string[];
+  date?: string;
+  createdAt?: string;
+}
 
 const MyTrips: React.FC = () => {
-  const [trips, setTrips] = useState([]);
+  const [trips, setTrips] = useState<Trip[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchTrips = async () => {
       setIsLoading(true);
       try {
-        const token = localStorage.getItem('token');
-        if (!token) throw new Error('No token found');
-        const response = await axios.get('http://localhost:5000/api/profile', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const userId = response.data._id;
-        const tripsResponse = await axios.get(`http://localhost:5000/api/users/${userId}/trips`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const profileRes = await api.get('/api/profile');
+        const userId = profileRes.data._id;
+        const tripsResponse = await api.get(`/api/users/${userId}/trips`);
         setTrips(tripsResponse.data);
       } catch (error) {
         console.error('Error fetching trips:', error);
-        alert('Failed to fetch trips: ' + error.message);
+        alert('Failed to fetch trips');
       } finally {
         setIsLoading(false);
       }
@@ -45,38 +51,23 @@ const MyTrips: React.FC = () => {
     visible: { opacity: 1, scale: 1, transition: { duration: 0.8, type: 'spring' } },
   };
 
-  const handleDelete = async (tripId) => {
+  const handleDelete = async (tripId: string) => {
     if (window.confirm('Are you sure you want to delete this trip?')) {
       try {
-        const token = localStorage.getItem('token');
-        await axios.delete(`http://localhost:5000/api/trips/${tripId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        await api.delete(`/api/trips/${tripId}`);
         setTrips(trips.filter(trip => trip._id !== tripId));
         alert('Trip deleted successfully');
       } catch (error) {
         console.error('Error deleting trip:', error);
-        alert('Failed to delete trip: ' + error.message);
+        alert('Failed to delete trip');
       }
     }
   };
 
-  const handleViewDetails = (trip) => {
-    // Mock PDF generation on frontend (replace with backend URL later)
-    const doc = new jsPDF();
-    doc.setFontSize(20);
-    doc.text(`Trip Details: ${trip.destination}`, 10, 20);
-    doc.setFontSize(12);
-    doc.text(`Duration: ${trip.duration}`, 10, 30);
-    doc.text(`Budget: $${trip.budget}`, 10, 40);
-    doc.text(`Companions: ${trip.companions}`, 10, 50);
-    doc.text('Activities:', 10, 60);
-    trip.activities.forEach((activity, index) => doc.text(`- ${activity}`, 10, 70 + index * 10));
-    const pdfData = doc.output('datauristring');
-    window.open(pdfData, '_blank');
-
-    // Alternative: Use backend-generated PDF
-    // window.open(`http://localhost:5000/api/trips/${trip._id}/pdf`, '_blank');
+  const handleViewDetails = (trip: Trip) => {
+    // Opens backend-generated PDF
+    const base = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    window.open(`${base}/api/trips/${trip._id}/pdf`, '_blank');
   };
 
   return (
@@ -117,7 +108,7 @@ const MyTrips: React.FC = () => {
           ) : (
             <AnimatePresence>
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                {trips.map((trip, index) => (
+                {trips.map((trip) => (
                   <motion.div
                     key={trip._id}
                     className="bg-white/80 backdrop-blur-md rounded-xl p-6 shadow-xl border border-indigo-100 hover:border-indigo-300 transition-all duration-300"
@@ -132,7 +123,7 @@ const MyTrips: React.FC = () => {
                     </div>
                     <div className="mt-3 flex items-center text-gray-600">
                       <Calendar className="h-5 w-5 mr-2" />
-                      <span className="text-sm">{trip.date || 'N/A'}</span>
+                      <span className="text-sm">{trip.date || trip.createdAt?.split('T')[0] || 'N/A'}</span>
                     </div>
                     <p className="mt-2 text-gray-600 line-clamp-2">{trip.activities.join(', ') || 'No activities'}</p>
                     <div className="mt-4 flex items-center text-gray-600">
@@ -149,15 +140,13 @@ const MyTrips: React.FC = () => {
                         View Details
                       </motion.button>
                       <motion.button
-  className="bg-red-600 text-white py-2 px-2 rounded-lg hover:bg-red-700 transition-colors flex-1 flex justify-center items-center"
-  whileHover={{ scale: 1.05 }}
-  whileTap={{ scale: 0.95 }}
-  onClick={() => handleDelete(trip._id)}
->
-  Delete
-  <Trash2 className="h-6 w-6" />
-</motion.button>
-
+                        className="bg-red-600 text-white py-2 px-2 rounded-lg hover:bg-red-700 transition-colors flex-1 flex justify-center items-center"
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => handleDelete(trip._id)}
+                      >
+                        Delete <Trash2 className="h-5 w-5 ml-1" />
+                      </motion.button>
                     </div>
                   </motion.div>
                 ))}

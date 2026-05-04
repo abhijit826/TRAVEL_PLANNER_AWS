@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, MapPin, Globe, Plane, Loader, Edit } from 'lucide-react';
-import axios from 'axios';
+import api from '../utils/api';
 import { useNavigate } from 'react-router-dom';
 
 const Profile: React.FC = () => {
@@ -15,15 +15,7 @@ const Profile: React.FC = () => {
       try {
         setIsLoading(true);
         setError(null);
-        const token = localStorage.getItem('token');
-        if (!token) {
-          navigate('/auth');
-          return;
-        }
-
-        const response = await axios.get('http://localhost:5000/api/profile', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const response = await api.get('/api/profile');
         setUser(response.data);
       } catch (error) {
         console.error('Error fetching user profile:', error);

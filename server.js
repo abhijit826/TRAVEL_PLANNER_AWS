@@ -1,54 +1,57 @@
 const express = require('express');
-const mongoose = require('mongoose');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const dotenv = require('dotenv');
-const { GoogleAuth } = require('google-auth-library');
-const itineraryRoutes = require('./routes/itinerary');
-const userRoutes = require('./routes/user');
-const tripRoutes = require('./routes/trip'); // Keep this if it has other endpoints
-const authRoutes = require('./routes/auth');
-const travelWalletRoutes = require('./routes/travelWallet');
-const { protect } = require('./middleware/authMiddleware');
-const tripRouter = require('./routes/trip.js'); // Updated path if in routes folder
 
+// Load .env for local development.
+// On EC2, use environment variables set via the launch script or SSM.
 dotenv.config();
 
+const authRoutes = require('./routes/auth');
+const userRoutes = require('./routes/user');
+const tripRoutes = require('./routes/trip');
+const travelWalletRoutes = require('./routes/travelWallet');
+const { protect } = require('./middleware/authMiddleware');
+
+// ─── NOTE ─────────────────────────────────────────────────────────────────────
+// MongoDB / Mongoose has been removed. Data is now stored in Amazon DynamoDB.
+// The DynamoDB client is initialized lazily in utils/dynamodb.js — no explicit
+// connection call is needed; the AWS SDK handles it automatically using the
+// EC2 IAM Instance Profile (or env vars for local dev).
+//
+// The /api/generate-itinerary route has been moved to AWS Lambda.
+// Amazon API Gateway routes that path directly to the Lambda function.
+// ──────────────────────────────────────────────────────────────────────────────
+
 const app = express();
-const port = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5000;
 
-// Middleware
-app.use(cors());
+// ── Middleware ────────────────────────────────────────────────────────────────
+app.use(cors({
+  origin: process.env.FRONTEND_URL || '*',
+  credentials: true,
+}));
 app.use(bodyParser.json());
+app.use(express.json());
 
-// MongoDB connection
-mongoose.connect(process.env.MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-  .then(() => console.log('Connected to MongoDB'))
-  .catch(err => console.error('MongoDB connection error:', err));
+// ── Health Check (for ALB / monitoring) ──────────────────────────────────────
+app.get('/health', (req, res) => res.json({ status: 'ok', region: process.env.AWS_REGION }));
 
-// Google Auth setup
-const auth = new GoogleAuth({
-  keyFile: './service-account.json',
-  scopes: ['https://www.googleapis.com/auth/generative-language'],
-});
-app.set('googleAuth', auth);
-
-// Routes
-app.use('/api', itineraryRoutes);
-app.use('/api', userRoutes); // Protected routes like /profile
-app.use('/api/auth', authRoutes); // Mount auth routes separately without protect
+// ── Routes ────────────────────────────────────────────────────────────────────
+app.use('/api/auth', authRoutes);
+app.use('/api', userRoutes);
+app.use('/api', protect, tripRoutes);
 app.use('/api/travel-wallet', travelWalletRoutes);
 
-// Use tripRouter from trip.js as the primary trip endpoint, with authentication
-app.use('/api', protect, tripRouter); // Apply protect middleware only to trip-related routes
+// ── Global Error Handler ──────────────────────────────────────────────────────
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  res.status(500).json({ message: err.message || 'Internal server error' });
+});
 
-// Optional: Keep tripRoutes if it has unique endpoints not in trip.js
-// app.use('/api', tripRoutes); // Uncomment if tripRoutes has additional functionality
-
-// Start the server
-app.listen(port, () => {
-  console.log(`Server is running on port: ${port}`);
+// ── Start ─────────────────────────────────────────────────────────────────────
+app.listen(PORT, () => {
+  console.log(`✅ Server running on port ${PORT}`);
+  console.log(`   Region : ${process.env.AWS_REGION || 'ap-south-1'}`);
+  console.log(`   Env    : ${process.env.NODE_ENV || 'development'}`);
 });

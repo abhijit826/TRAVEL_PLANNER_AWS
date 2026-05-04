@@ -1,12 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const TravelDocument = require('../models/TravelDocument');
-const { protect } = require('../middleware/authMiddleware'); // Assuming you have auth middleware
+const { protect } = require('../middleware/authMiddleware');
 
-// Get all documents for the logged-in user
+// ── GET /api/travel-wallet/documents ─────────────────────────────────────────
 router.get('/documents', protect, async (req, res) => {
   try {
-    const documents = await TravelDocument.find({ userId: req.user._id });
+    const documents = await TravelDocument.findByUserId(req.user.userId);
     res.json(documents);
   } catch (error) {
     console.error('Error fetching documents:', error);
@@ -14,12 +14,10 @@ router.get('/documents', protect, async (req, res) => {
   }
 });
 
-// Add a new document
+// ── POST /api/travel-wallet/documents ────────────────────────────────────────
 router.post('/documents', protect, async (req, res) => {
   try {
-    const documentData = { ...req.body, userId: req.user._id };
-    const document = new TravelDocument(documentData);
-    await document.save();
+    const document = await TravelDocument.create(req.user.userId, req.body);
     res.status(201).json(document);
   } catch (error) {
     console.error('Error adding document:', error);
@@ -27,17 +25,15 @@ router.post('/documents', protect, async (req, res) => {
   }
 });
 
-// Update a document
+// ── PUT /api/travel-wallet/documents/:id ─────────────────────────────────────
 router.put('/documents/:id', protect, async (req, res) => {
   try {
     const document = await TravelDocument.findOneAndUpdate(
-      { _id: req.params.id, userId: req.user._id },
-      req.body,
-      { new: true, runValidators: true }
+      req.user.userId,
+      req.params.id,
+      req.body
     );
-    if (!document) {
-      return res.status(404).json({ message: 'Document not found' });
-    }
+    if (!document) return res.status(404).json({ message: 'Document not found' });
     res.json(document);
   } catch (error) {
     console.error('Error updating document:', error);
@@ -45,16 +41,11 @@ router.put('/documents/:id', protect, async (req, res) => {
   }
 });
 
-// Delete a document
+// ── DELETE /api/travel-wallet/documents/:id ───────────────────────────────────
 router.delete('/documents/:id', protect, async (req, res) => {
   try {
-    const document = await TravelDocument.findOneAndDelete({
-      _id: req.params.id,
-      userId: req.user._id,
-    });
-    if (!document) {
-      return res.status(404).json({ message: 'Document not found' });
-    }
+    const document = await TravelDocument.findOneAndDelete(req.user.userId, req.params.id);
+    if (!document) return res.status(404).json({ message: 'Document not found' });
     res.json({ message: 'Document deleted' });
   } catch (error) {
     console.error('Error deleting document:', error);
