@@ -1,6 +1,13 @@
+const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
 const axios = require('axios');
 
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+// ── Bedrock Client (uses Lambda's IAM role — no API key needed) ───────────────
+const bedrock = new BedrockRuntimeClient({ region: process.env.AWS_REGION || 'ap-south-1' });
+
+// Model to use — Claude 3 Haiku is fast, cheap, and excellent for structured JSON
+// Alternatives: 'amazon.titan-text-express-v1' (if Claude not available in region)
+const MODEL_ID = process.env.BEDROCK_MODEL_ID || 'anthropic.claude-3-haiku-20240307-v1:0';
+
 const WEATHER_API_URL = 'https://api.openweathermap.org/data/2.5/forecast';
 
 // ── Weather Helper ────────────────────────────────────────────────────────────
@@ -22,9 +29,9 @@ const getWeatherForecast = async (city, startDate, durationDays) => {
         if (!acc[date]) {
           acc[date] = {
             date,
-            temperature: item.main.temp,
+            temperature: Math.round(item.main.temp),
             condition: item.weather[0].main,
-            rainProbability: item.rain ? (item.rain['3h'] ? item.rain['3h'] * 10 : 0) : 0,
+            rainProbability: item.rain ? Math.round((item.rain['3h'] || 0) * 10) : 0,
           };
         }
         return acc;
@@ -53,6 +60,65 @@ const estimateCrowdLevel = (date, duration) => {
     crowdLevel: isWeekend ? 'high' : 'moderate',
     durationDays: durationDaysMap[duration] || 3,
   };
+};
+
+// ── Invoke Amazon Bedrock (Claude 3 Haiku) ────────────────────────────────────
+const invokeBedrockClaude = async (prompt) => {
+  const body = JSON.stringify({
+    anthropic_version: 'bedrock-2023-05-31',
+    max_tokens: 4096,
+    temperature: 0.7,
+    messages: [
+      {
+        role: 'user',
+        content: prompt,
+      },
+    ],
+  });
+
+  const command = new InvokeModelCommand({
+    modelId: MODEL_ID,
+    contentType: 'application/json',
+    accept: 'application/json',
+    body,
+  });
+
+  const response = await bedrock.send(command);
+  const decoded = JSON.parse(Buffer.from(response.body).toString('utf-8'));
+  return decoded.content[0].text;
+};
+
+// ── Invoke Amazon Titan (fallback if Claude unavailable in region) ────────────
+const invokeBedrockTitan = async (prompt) => {
+  const body = JSON.stringify({
+    inputText: prompt,
+    textGenerationConfig: {
+      maxTokenCount: 4096,
+      temperature: 0.7,
+      topP: 0.9,
+    },
+  });
+
+  const command = new InvokeModelCommand({
+    modelId: 'amazon.titan-text-express-v1',
+    contentType: 'application/json',
+    accept: 'application/json',
+    body,
+  });
+
+  const response = await bedrock.send(command);
+  const decoded = JSON.parse(Buffer.from(response.body).toString('utf-8'));
+  return decoded.results[0].outputText;
+};
+
+// ── Main Bedrock Call (Claude with Titan fallback) ────────────────────────────
+const generateWithBedrock = async (prompt) => {
+  try {
+    return await invokeBedrockClaude(prompt);
+  } catch (err) {
+    console.warn('Claude unavailable, falling back to Amazon Titan:', err.message);
+    return await invokeBedrockTitan(prompt);
+  }
 };
 
 // ── Lambda Handler ────────────────────────────────────────────────────────────
@@ -84,7 +150,7 @@ exports.handler = async (event) => {
     return {
       statusCode: 400,
       headers,
-      body: JSON.stringify({ message: 'Missing required preferences' }),
+      body: JSON.stringify({ message: 'Missing required fields: origin, destination, maxPrice, departureDate, duration' }),
     };
   }
 
@@ -96,52 +162,73 @@ exports.handler = async (event) => {
       return {
         statusCode: 502,
         headers,
-        body: JSON.stringify({ message: 'Failed to fetch weather data' }),
+        body: JSON.stringify({ message: 'Failed to fetch weather data. Check OPENWEATHERMAP_API_KEY.' }),
       };
     }
 
-    const prompt = `
-      Generate a travel itinerary for a trip from ${origin} to ${destination}
-      with a budget of ${maxPrice} dollars, departing on ${departureDate}
-      for a duration of ${duration} (${durationDays} days).
-      Constraints:
-      - Weather: ${weatherData.map(w => `${w.date}: ${w.temperature}°F, ${w.condition}, ${w.rainProbability}% rain`).join('; ')}
-      - Avoid outdoor activities if rain > 50% or temp < 32°F or > 90°F
-      - Crowd level: ${crowdLevel}
-      Return ONLY valid JSON (no markdown fences) with this structure:
-      {
-        "destination": "string",
-        "startDate": "YYYY-MM-DD",
-        "durationDays": number,
-        "totalCost": number,
-        "crowdLevel": "string",
-        "dailyPlans": [
-          {
-            "day": number,
-            "date": "YYYY-MM-DD",
-            "weather": { "temperature": number, "condition": "string", "rainProbability": number },
-            "activities": [{ "time": "string", "description": "string", "location": "string", "cost": number }]
-          }
-        ]
-      }
-    `;
+    const weatherSummary = weatherData
+      .map((w) => `${w.date}: ${w.temperature}°F, ${w.condition}, ${w.rainProbability}% rain`)
+      .join('; ');
 
-    const geminiResponse = await axios.post(
-      `${GEMINI_API_URL}?key=${process.env.GEMINI_API_KEY}`,
-      { contents: [{ parts: [{ text: prompt }] }] },
-      { headers: { 'Content-Type': 'application/json' } }
-    );
+    const prompt = `You are an expert travel planner. Generate a detailed travel itinerary as valid JSON only (no markdown, no explanation, just raw JSON).
 
-    const rawText = geminiResponse.data.candidates[0].content.parts[0].text;
+Trip details:
+- From: ${origin}
+- To: ${destination}
+- Budget: $${maxPrice} USD total
+- Departure: ${departureDate}
+- Duration: ${duration} (${durationDays} days)
+- Travel companions: ${preferences.companions || 'not specified'}
+- Crowd level: ${crowdLevel}
+- Weather forecast: ${weatherSummary}
+
+Rules:
+- Avoid outdoor activities if rain probability > 50%
+- Avoid outdoor activities if temperature < 32°F or > 95°F
+- Keep total costs within the $${maxPrice} budget
+- Include realistic activity costs
+
+Return ONLY this JSON structure (no markdown fences, no extra text):
+{
+  "destination": "string",
+  "startDate": "YYYY-MM-DD",
+  "durationDays": number,
+  "totalCost": number,
+  "crowdLevel": "string",
+  "dailyPlans": [
+    {
+      "day": number,
+      "date": "YYYY-MM-DD",
+      "weather": {
+        "temperature": number,
+        "condition": "string",
+        "rainProbability": number
+      },
+      "activities": [
+        {
+          "time": "HH:MM AM/PM",
+          "description": "string",
+          "location": "string",
+          "cost": number
+        }
+      ]
+    }
+  ]
+}`;
+
+    const rawText = await generateWithBedrock(prompt);
+
     let itinerary;
     try {
+      // Strip any accidental markdown fences from the model response
       const clean = rawText.replace(/```json\n?|\n?```/g, '').trim();
       itinerary = JSON.parse(clean);
     } catch {
+      console.warn('Could not parse JSON from model response — returning raw text');
       itinerary = { rawText };
     }
 
-    // Backfill weather if Gemini didn't include it
+    // Backfill weather data if model didn't include it
     if (itinerary.dailyPlans) {
       itinerary.dailyPlans.forEach((day, i) => {
         if (!day.weather && weatherData[i]) day.weather = weatherData[i];
@@ -155,7 +242,7 @@ exports.handler = async (event) => {
       body: JSON.stringify({ success: true, itinerary }),
     };
   } catch (error) {
-    console.error('Lambda error:', error.message);
+    console.error('Lambda error:', error);
     return {
       statusCode: 500,
       headers,

@@ -44,7 +44,7 @@ else
     --profile "$PROFILE" \
     --environment "Variables={
       OPENWEATHERMAP_API_KEY=REPLACE,
-      GEMINI_API_KEY=REPLACE
+      BEDROCK_MODEL_ID=anthropic.claude-3-haiku-20240307-v1:0
     }"
 fi
 
