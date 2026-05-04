@@ -4,9 +4,9 @@ const axios = require('axios');
 // ── Bedrock Client (uses Lambda's IAM role — no API key needed) ───────────────
 const bedrock = new BedrockRuntimeClient({ region: process.env.AWS_REGION || 'ap-south-1' });
 
-// Model to use — Claude 3 Haiku is fast, cheap, and excellent for structured JSON
-// Alternatives: 'amazon.titan-text-express-v1' (if Claude not available in region)
-const MODEL_ID = process.env.BEDROCK_MODEL_ID || 'anthropic.claude-3-haiku-20240307-v1:0';
+// Model config — Amazon Titan is default (no use case form needed, works instantly)
+// To use Claude 3 Haiku instead: set BEDROCK_MODEL_ID in Lambda env vars
+const MODEL_ID = process.env.BEDROCK_MODEL_ID || 'amazon.titan-text-express-v1';
 
 const WEATHER_API_URL = 'https://api.openweathermap.org/data/2.5/forecast';
 
