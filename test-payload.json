@@ -1,0 +1,1 @@
+{"httpMethod":"POST","body":"{\"origin\":\"Chennai\",\"destination\":\"Mumbai\",\"maxPrice\":\"500\",\"departureDate\":\"2025-06-01\",\"duration\":\"short-trip-(4-7-days)\",\"companions\":\"couple\"}"}

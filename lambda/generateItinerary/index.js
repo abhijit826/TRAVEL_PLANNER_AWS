@@ -1,12 +1,11 @@
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
 const axios = require('axios');
 
-// ── Bedrock Client (uses Lambda's IAM role — no API key needed) ───────────────
 const bedrock = new BedrockRuntimeClient({ region: process.env.AWS_REGION || 'ap-south-1' });
 
-// Model config — Amazon Titan is default (no use case form needed, works instantly)
-// To use Claude 3 Haiku instead: set BEDROCK_MODEL_ID in Lambda env vars
-const MODEL_ID = process.env.BEDROCK_MODEL_ID || 'amazon.titan-text-express-v1';
+// Default: Amazon Titan Text Premier (current, not EOL)
+// Override via Lambda env var BEDROCK_MODEL_ID
+const MODEL_ID = process.env.BEDROCK_MODEL_ID || 'amazon.titan-text-premier-v1:0';
 
 const WEATHER_API_URL = 'https://api.openweathermap.org/data/2.5/forecast';
 
@@ -21,7 +20,6 @@ const getWeatherForecast = async (city, startDate, durationDays) => {
         cnt: durationDays * 8,
       },
     });
-
     const forecast = response.data.list
       .filter((item) => new Date(item.dt * 1000).toISOString().split('T')[0] >= startDate)
       .reduce((acc, item) => {
@@ -36,7 +34,6 @@ const getWeatherForecast = async (city, startDate, durationDays) => {
         }
         return acc;
       }, {});
-
     return Object.values(forecast).slice(0, durationDays);
   } catch (error) {
     console.error('Weather fetch error:', error.message);
@@ -48,59 +45,53 @@ const getWeatherForecast = async (city, startDate, durationDays) => {
 const estimateCrowdLevel = (date, duration) => {
   const dayOfWeek = new Date(date).getDay();
   const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-
   const durationDaysMap = {
     'weekend-getaway-(1-3-days)': 3,
     'short-trip-(4-7-days)': 7,
     'medium-trip-(1-2-weeks)': 14,
     'long-trip-(2+-weeks)': 21,
   };
-
   return {
     crowdLevel: isWeekend ? 'high' : 'moderate',
     durationDays: durationDaysMap[duration] || 3,
   };
 };
 
-// ── Invoke Amazon Bedrock (Claude 3 Haiku) ────────────────────────────────────
-const invokeBedrockClaude = async (prompt) => {
-  const body = JSON.stringify({
-    anthropic_version: 'bedrock-2023-05-31',
-    max_tokens: 4096,
-    temperature: 0.7,
-    messages: [
-      {
-        role: 'user',
-        content: prompt,
-      },
-    ],
-  });
+// ── Smart Bedrock Invoker — auto-detects model format ────────────────────────
+const invokeModel = async (modelId, prompt) => {
+  let body;
 
-  const command = new InvokeModelCommand({
-    modelId: MODEL_ID,
-    contentType: 'application/json',
-    accept: 'application/json',
-    body,
-  });
-
-  const response = await bedrock.send(command);
-  const decoded = JSON.parse(Buffer.from(response.body).toString('utf-8'));
-  return decoded.content[0].text;
-};
-
-// ── Invoke Amazon Titan (fallback if Claude unavailable in region) ────────────
-const invokeBedrockTitan = async (prompt) => {
-  const body = JSON.stringify({
-    inputText: prompt,
-    textGenerationConfig: {
-      maxTokenCount: 4096,
+  if (modelId.startsWith('anthropic.')) {
+    // Claude format
+    body = JSON.stringify({
+      anthropic_version: 'bedrock-2023-05-31',
+      max_tokens: 4096,
       temperature: 0.7,
-      topP: 0.9,
-    },
-  });
+      messages: [{ role: 'user', content: prompt }],
+    });
+  } else if (modelId.startsWith('amazon.titan')) {
+    // Titan format (Premier, Lite, etc.)
+    body = JSON.stringify({
+      inputText: prompt,
+      textGenerationConfig: {
+        maxTokenCount: 4096,
+        temperature: 0.7,
+        topP: 0.9,
+      },
+    });
+  } else if (modelId.startsWith('meta.llama')) {
+    // Llama format
+    body = JSON.stringify({
+      prompt,
+      max_gen_len: 2048,
+      temperature: 0.7,
+    });
+  } else {
+    throw new Error(`Unsupported model prefix: ${modelId}`);
+  }
 
   const command = new InvokeModelCommand({
-    modelId: 'amazon.titan-text-express-v1',
+    modelId,
     contentType: 'application/json',
     accept: 'application/json',
     body,
@@ -108,18 +99,18 @@ const invokeBedrockTitan = async (prompt) => {
 
   const response = await bedrock.send(command);
   const decoded = JSON.parse(Buffer.from(response.body).toString('utf-8'));
-  return decoded.results[0].outputText;
-};
 
-// ── Main Bedrock Call (Claude with Titan fallback) ────────────────────────────
-const generateWithBedrock = async (prompt) => {
-  try {
-    return await invokeBedrockClaude(prompt);
-  } catch (err) {
-    console.warn('Claude unavailable, falling back to Amazon Titan:', err.message);
-    return await invokeBedrockTitan(prompt);
+  // Extract text based on model type
+  if (modelId.startsWith('anthropic.')) {
+    return decoded.content[0].text;
+  } else if (modelId.startsWith('amazon.titan')) {
+    return decoded.results[0].outputText;
+  } else if (modelId.startsWith('meta.llama')) {
+    return decoded.generation;
   }
 };
+
+
 
 // ── Lambda Handler ────────────────────────────────────────────────────────────
 exports.handler = async (event) => {
@@ -216,7 +207,7 @@ Return ONLY this JSON structure (no markdown fences, no extra text):
   ]
 }`;
 
-    const rawText = await generateWithBedrock(prompt);
+    const rawText = await invokeModel(MODEL_ID, prompt);
 
     let itinerary;
     try {
