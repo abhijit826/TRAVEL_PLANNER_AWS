@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { User, MapPin, Globe, Plane, Loader, Edit } from 'lucide-react';
 import api from '../utils/api';
 import { useNavigate } from 'react-router-dom';

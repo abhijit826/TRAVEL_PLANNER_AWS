@@ -1,5 +1,8 @@
 export interface TripPreferences {
+  origin: string;
   destination: string;
+  maxPrice: string;
+  departureDate: string;
   duration: string;
   budget: string;
   companions: string;

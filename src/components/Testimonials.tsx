@@ -2,7 +2,8 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Star } from 'lucide-react';
 
-const testimonials = [
+interface Testimonial { name: string; role: string; image: string; quote: string; }
+const testimonials: Testimonial[] = [
   // {
   //   name: 'Sarah Johnson',
   //   role: 'Adventure Traveler',

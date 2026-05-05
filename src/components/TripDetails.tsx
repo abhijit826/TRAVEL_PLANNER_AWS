@@ -1,18 +1,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { 
-  MapPin, 
-  Calendar, 
-  DollarSign, 
-  Users, 
-  Clock, 
-  Map, 
-  Download, 
-  Share2, 
-  Sun, 
-  CloudRain, 
-  Cloud, 
+import {
+  MapPin,
+  Calendar,
+  DollarSign,
+  Users,
+  Map,
+  Download,
+  Share2,
+  Sun,
+  CloudRain,
+  Cloud,
   Wind,
   Tag,
   Users as UsersIcon,
@@ -60,7 +59,7 @@ const TripDetails: React.FC = () => {
     console.log('Extracted Itinerary:', itinerary);
     console.log('Preferences:', preferences);
     if (showMap && itinerary.dailyPlans[activeDay - 1]?.activities) {
-      console.log('Map Locations:', itinerary.dailyPlans[activeDay - 1].activities.map(a => a.location));
+      console.log('Map Locations:', itinerary.dailyPlans[activeDay - 1].activities.map((a: { location: string }) => a.location));
     }
   }, [itineraryData, itinerary, preferences, showMap, activeDay]);
 
@@ -96,8 +95,8 @@ const TripDetails: React.FC = () => {
     setMapError('Google Maps API Key is missing or invalid. Please configure VITE_GOOGLE_MAPS_API_KEY in .env.');
   }
 
-  const normalizeLocation = (location) => {
-    const locationMap = {
+  const normalizeLocation = (location: string): string => {
+    const locationMap: Record<string, string> = {
       'LAX Airport & Union Station': 'Los Angeles International Airport, Los Angeles, CA to Union Station, Los Angeles, CA',
       'LAX': 'Los Angeles International Airport, Los Angeles, CA',
       'Chennai Central Railway Station': 'Chennai Central, Chennai, India',
@@ -118,9 +117,9 @@ const TripDetails: React.FC = () => {
 
     console.log('Itinerary Data for Booking:', { startDate, destination, origin, activities });
 
-    if (destination.includes('mas') || destination.includes('hyb') || activities.some(a => a.location.toLowerCase().includes('chennai') || a.location.toLowerCase().includes('hyderabad'))) {
+    if (destination.includes('mas') || destination.includes('hyb') || activities.some((a: { location: string }) => a.location.toLowerCase().includes('chennai') || a.location.toLowerCase().includes('hyderabad'))) {
       return `https://www.irctc.co.in/nget/train-search?from=${encodeURIComponent(origin)}&to=${encodeURIComponent(destination)}&date=${encodeURIComponent(startDate)}`;
-    } else if (destination.includes('los angeles') || destination.includes('lax') || activities.some(a => a.location.toLowerCase().includes('los angeles') || a.location.toLowerCase().includes('lax'))) {
+    } else if (destination.includes('los angeles') || destination.includes('lax') || activities.some((a: { location: string }) => a.location.toLowerCase().includes('los angeles') || a.location.toLowerCase().includes('lax'))) {
       return `https://www.expedia.com/Flights-Search?mode=search&flight-type=on&destination=${encodeURIComponent('Los Angeles, CA (LAX-Los Angeles Intl.)')}&d1=${encodeURIComponent(startDate)}`;
     } else {
       return `https://www.makemytrip.com/flights/?fromCity=${encodeURIComponent(origin)}&toCity=${encodeURIComponent(destination)}&tripDate=${encodeURIComponent(startDate)}`;
@@ -141,17 +140,18 @@ const TripDetails: React.FC = () => {
         duration: preferences.duration || 'unknown',
         budget: preferences.budget || 'unknown',
         companions: preferences.companions || 'unknown',
-        activities: itinerary.dailyPlans.flatMap(day => day.activities.map(act => act.description || act.location)),
+        activities: itinerary.dailyPlans.flatMap((day: { activities: { description?: string; location: string }[] }) => day.activities.map((act) => act.description || act.location)),
       };
-      console.log('Sending trip data:', tripData); // Debug log
+      console.log('Sending trip data:', tripData);
       const response = await axios.post('http://localhost:5000/api/trips', tripData, {
         headers: { Authorization: `Bearer ${token}` },
       });
       console.log('Trip saved:', response.data);
       navigate('/my-trips');
-    } catch (error) {
-      console.error('Error saving trip:', error.response ? error.response.data : error.message);
-      alert('Failed to save trip: ' + (error.response ? JSON.stringify(error.response.data) : error.message));
+    } catch (err: unknown) {
+      const e = err as { response?: { data: unknown }; message?: string };
+      console.error('Error saving trip:', e.response ? e.response.data : e.message);
+      alert('Failed to save trip: ' + (e.response ? JSON.stringify(e.response.data) : e.message));
     }
   };
 
@@ -166,15 +166,15 @@ const TripDetails: React.FC = () => {
     saveTrip();
   };
 
-  const drawRoute = useCallback((response, status) => {
+  const drawRoute = useCallback((response: google.maps.DirectionsResult | null, status: google.maps.DirectionsStatus) => {
     console.log('Directions Response:', response, 'Status:', status);
-    if (status === 'OK' && directionsRenderer) {
+    if (status === 'OK' && directionsRenderer && response) {
       directionsRenderer.setDirections(response);
       if (response.routes[0] && response.routes[0].legs) {
         const legs = response.routes[0].legs;
         const activities = itinerary.dailyPlans[activeDay - 1].activities;
         console.log(`Legs: ${legs.length}, Activities: ${activities.length}`);
-        activities.forEach((activity, index) => {
+        activities.forEach((activity: { description?: string; location: string }, index: number) => {
           let position;
           if (index < legs.length) {
             position = legs[index].start_location;
@@ -186,7 +186,7 @@ const TripDetails: React.FC = () => {
           }
           new google.maps.Marker({
             map: directionsRenderer.getMap(),
-            position: position,
+            position,
             title: activity.description,
             label: `${index + 1}`,
           });
@@ -195,10 +195,10 @@ const TripDetails: React.FC = () => {
         console.warn('No valid route or legs in response:', response);
       }
     } else if (status === 'ZERO_RESULTS') {
-      setMapError('No route found between the selected locations. Please check the addresses or try a different travel mode.');
+      setMapError('No route found between the selected locations.');
     } else {
-      console.error('Directions request failed with status:', status, 'Response:', response);
-      setMapError(`Failed to load route: ${status}. Locations used: ${itinerary.dailyPlans[activeDay - 1].activities.map(a => a.location).join(', ')}`);
+      console.error('Directions request failed with status:', status);
+      setMapError(`Failed to load route: ${status}. Locations: ${itinerary.dailyPlans[activeDay - 1].activities.map((a: { location: string }) => a.location).join(', ')}`);
     }
   }, [directionsRenderer, activeDay, itinerary.dailyPlans]);
 
@@ -265,23 +265,15 @@ const TripDetails: React.FC = () => {
           {showMap && (
             <LoadScript
               googleMapsApiKey={apiKey}
-              libraries={['directions']}
-              onError={(error) => {
-                console.error('Google Maps LoadScript Error:', error);
-                setMapError('Failed to load Google Maps libraries. Check API key and library permissions.');
-              }}
-              onLoad={() => console.log('Google Maps Libraries Loaded Successfully')}
+              libraries={['places']}
+              onLoad={() => console.log('Google Maps Loaded')}
             >
               <GoogleMap
                 mapContainerStyle={mapContainerStyle}
                 center={center}
                 zoom={10}
-                onLoad={(mapInstance) => {
-                  console.log('Map Loaded:', mapInstance);
-                }}
-                onUnmount={() => {
-                  setMapError(null);
-                }}
+                onLoad={(mapInstance) => console.log('Map Loaded:', mapInstance)}
+                onUnmount={() => setMapError(null)}
               >
                 <TrafficLayer />
                 {itinerary.dailyPlans[activeDay - 1]?.activities.length > 1 && (
@@ -291,10 +283,10 @@ const TripDetails: React.FC = () => {
                       destination: normalizeLocation(itinerary.dailyPlans[activeDay - 1].activities[itinerary.dailyPlans[activeDay - 1].activities.length - 1].location),
                       waypoints: itinerary.dailyPlans[activeDay - 1].activities
                         .slice(1, -1)
-                        .filter((item, index, self) => 
-                          index === self.findIndex((t) => t.location === item.location)
+                        .filter((item: { location: string }, index: number, self: { location: string }[]) =>
+                          index === self.findIndex((t: { location: string }) => t.location === item.location)
                         )
-                        .map((activity) => ({ location: normalizeLocation(activity.location), stopover: true })),
+                        .map((activity: { location: string }) => ({ location: normalizeLocation(activity.location), stopover: true })),
                       optimizeWaypoints: true,
                       travelMode: google.maps.TravelMode.WALKING,
                     }}
@@ -302,26 +294,20 @@ const TripDetails: React.FC = () => {
                   />
                 )}
                 <DirectionsRenderer
-                  options={{
-                    suppressMarkers: true,
-                  }}
+                  options={{ suppressMarkers: true }}
                   onLoad={(renderer) => {
                     setDirectionsRenderer(renderer);
                     console.log('Directions Renderer Loaded:', renderer);
-                  }}
-                  onError={(error) => {
-                    console.error('Directions Renderer Error:', error);
-                    setMapError('Failed to render route due to an error.');
                   }}
                 />
               </GoogleMap>
               {mapError && <p className="text-red-600 text-center mt-2">{mapError}</p>}
             </LoadScript>
-          ) || (showMap && <div className="mb-6 rounded-lg overflow-hidden bg-gray-200 h-[20rem] flex items-center justify-center"><p className="text-gray-500">Map failed to load. Check console for details.</p></div>)}
+          )}
 
           {/* Day Tabs */}
           <motion.div variants={itemVariants} className="flex mb-6 overflow-x-auto pb-2 space-x-2">
-            {itinerary.dailyPlans.map((day) => (
+            {itinerary.dailyPlans.map((day: { day: number; date: string; weather?: { temperature?: number; condition?: string; rainProbability?: number }; activities: { time?: string; description?: string; location: string; cost?: number }[] }) => (
               <motion.button
                 key={day.day}
                 variants={itemVariants}
@@ -341,8 +327,8 @@ const TripDetails: React.FC = () => {
           {/* Daily Plan Details */}
           <motion.div variants={containerVariants} className="bg-gray-50 rounded-xl p-6">
             {itinerary.dailyPlans
-              .filter((day) => day.day === activeDay)
-              .map((day) => (
+              .filter((day: { day: number }) => day.day === activeDay)
+              .map((day: { day: number; date: string; weather?: { temperature?: number; condition?: string; rainProbability?: number }; activities: { time?: string; description?: string; location: string; cost?: number }[] }) => (
                 <motion.div key={day.day} variants={itemVariants}>
                   <h3 className="text-2xl font-semibold text-gray-900 mb-4 flex items-center">
                     <Calendar className="h-6 w-6 mr-2 text-indigo-600" />
@@ -398,7 +384,7 @@ const TripDetails: React.FC = () => {
                     {day.activities.length === 0 ? (
                       <p className="text-gray-500 italic text-center py-4 bg-white rounded-lg">No activities planned for this day.</p>
                     ) : (
-                      day.activities.map((activity, index) => (
+                      day.activities.map((activity: { time?: string; description?: string; location: string; cost?: number }, index: number) => (
                         <motion.div
                           key={index}
                           variants={itemVariants}

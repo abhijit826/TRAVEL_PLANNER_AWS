@@ -1,5 +1,5 @@
 import React from 'react';
-import { Compass, Facebook, Twitter, Instagram, Mail } from 'lucide-react';
+import { Compass } from 'lucide-react';
 
 const Footer: React.FC = () => {
   return (
