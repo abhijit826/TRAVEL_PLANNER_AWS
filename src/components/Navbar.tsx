@@ -10,7 +10,7 @@ const Navbar: React.FC = () => {
 
   const handleLogout = () => {
     localStorage.removeItem('token');
-    navigate('/login');
+    navigate('/auth');
   };
 
   return (
@@ -65,7 +65,11 @@ const Navbar: React.FC = () => {
                   </div>
                 )}
               </div>
-            ) : null}
+            ) : (
+              <Link to="/auth" className="px-4 py-2 rounded-md text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition">
+                Login
+              </Link>
+            )}
           </div>
           
           <div className="flex items-center md:hidden">
@@ -120,7 +124,15 @@ const Navbar: React.FC = () => {
                   Logout
                 </button>
               </>
-            ) : null}
+            ) : (
+              <Link
+                to="/auth"
+                className="block px-3 py-2 rounded-md text-base font-medium bg-indigo-600 text-white hover:bg-indigo-700"
+                onClick={() => setIsOpen(false)}
+              >
+                Login
+              </Link>
+            )}
           </div>
         </div>
       )}

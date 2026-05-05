@@ -17,7 +17,7 @@ import {
   Users as UsersIcon,
 } from 'lucide-react';
 import { GoogleMap, LoadScript, DirectionsService, DirectionsRenderer, TrafficLayer } from '@react-google-maps/api';
-import axios from 'axios';
+import api from '../utils/api';
 
 const TripDetails: React.FC = () => {
   const location = useLocation();
@@ -25,32 +25,41 @@ const TripDetails: React.FC = () => {
   const itineraryData = location.state?.itinerary;
   const preferences = location.state?.preferences;
 
+  // Guard: if accessed directly without itinerary state, redirect to create-trip
+  useEffect(() => {
+    if (!itineraryData) {
+      navigate('/create-trip', { replace: true, state: { message: 'Please generate an itinerary first.' } });
+    }
+  }, [itineraryData, navigate]);
+
   const [activeDay, setActiveDay] = useState(1);
   const [showMap, setShowMap] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
   const [directionsRenderer, setDirectionsRenderer] = useState<google.maps.DirectionsRenderer | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [isUserIdLoading, setIsUserIdLoading] = useState(true);
+  const [shareSuccess, setShareSuccess] = useState(false);
 
   const itinerary = itineraryData?.itinerary || { dailyPlans: [], rawText: 'No itinerary available' };
+
 
   useEffect(() => {
     const fetchUserProfile = async () => {
       setIsUserIdLoading(true);
       try {
+
         const token = localStorage.getItem('token');
         if (!token) throw new Error('No token found');
-        const response = await axios.get('http://localhost:5000/api/profile', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const response = await api.get('/api/profile');
         setUserId(response.data._id);
-        console.log('User ID fetched:', response.data._id); // Debug log
+        console.log('User ID fetched:', response.data._id);
       } catch (error) {
         console.error('Error fetching user profile:', error);
         setMapError('Failed to load user profile for trip saving.');
       } finally {
         setIsUserIdLoading(false);
       }
+
     };
 
     fetchUserProfile();
@@ -143,9 +152,7 @@ const TripDetails: React.FC = () => {
         activities: itinerary.dailyPlans.flatMap((day: { activities: { description?: string; location: string }[] }) => day.activities.map((act) => act.description || act.location)),
       };
       console.log('Sending trip data:', tripData);
-      const response = await axios.post('http://localhost:5000/api/trips', tripData, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await api.post('/api/trips', tripData);
       console.log('Trip saved:', response.data);
       navigate('/my-trips');
     } catch (err: unknown) {
@@ -165,6 +172,72 @@ const TripDetails: React.FC = () => {
     window.open(bookingUrl, '_blank');
     saveTrip();
   };
+
+  // ── Download itinerary as formatted HTML file ─────────────────────────────
+  const downloadItinerary = () => {
+    const days = itinerary.dailyPlans
+      .map((day: { day: number; date: string; weather?: { temperature?: number; condition?: string; rainProbability?: number }; activities: { time?: string; description?: string; location: string; cost?: number }[] }) => `
+        <h3 style="color:#4f46e5;border-bottom:1px solid #e5e7eb;padding-bottom:8px">Day ${day.day} — ${new Date(day.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</h3>
+        ${day.weather ? `<p style="color:#6b7280;font-size:14px">🌡 ${day.weather.temperature}°F &nbsp;|&nbsp; ${day.weather.condition} &nbsp;|&nbsp; 🌧 ${day.weather.rainProbability}% rain</p>` : ''}
+        <table style="width:100%;border-collapse:collapse;margin-top:8px">
+          <thead><tr style="background:#f3f4f6">
+            <th style="padding:8px;text-align:left">Time</th>
+            <th style="padding:8px;text-align:left">Activity</th>
+            <th style="padding:8px;text-align:left">Location</th>
+            <th style="padding:8px;text-align:right">Cost</th>
+          </tr></thead>
+          <tbody>${day.activities.map((a: { time?: string; description?: string; location: string; cost?: number }, i: number) => `
+            <tr style="background:${i % 2 === 0 ? '#fff' : '#f9fafb'}">
+              <td style="padding:8px;color:#6b7280">${a.time || '—'}</td>
+              <td style="padding:8px;font-weight:500">${a.description || '—'}</td>
+              <td style="padding:8px;color:#4f46e5">${a.location}</td>
+              <td style="padding:8px;text-align:right">$${a.cost ?? 0}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>`).join('');
+
+    const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<title>Itinerary — ${itinerary.destination}</title>
+<style>body{font-family:Arial,sans-serif;max-width:900px;margin:40px auto;padding:0 20px;color:#111}</style>
+</head><body>
+<h1 style="color:#4f46e5">✈️ ${itinerary.destination} Travel Itinerary</h1>
+<p><strong>Duration:</strong> ${itinerary.durationDays} days &nbsp;|&nbsp; <strong>Start:</strong> ${itinerary.startDate} &nbsp;|&nbsp; <strong>Total Cost:</strong> $${itinerary.totalCost}</p>
+<hr style="border-color:#e5e7eb">
+${days}
+<p style="margin-top:32px;color:#9ca3af;font-size:12px">Generated by Travel Planner AI · Powered by Amazon Nova Pro</p>
+</body></html>`;
+
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${itinerary.destination}-itinerary.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // ── Share itinerary (Web Share API → clipboard fallback) ──────────────────
+  const shareItinerary = async () => {
+    const appUrl = import.meta.env.VITE_APP_URL || 'https://d3se73vbq7jmlm.cloudfront.net';
+    const text = `✈️ My trip to ${itinerary.destination}!\n📅 ${itinerary.durationDays} days starting ${itinerary.startDate}\n💰 Estimated cost: $${itinerary.totalCost}\n\n🌍 Plan your own trip:\n${appUrl}\n\nGenerated by Travel Planner AI · Powered by Amazon Nova Pro`;
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `${itinerary.destination} Trip Itinerary`,
+          text,
+          url: appUrl,
+        });
+      } catch { /* user cancelled */ }
+    } else {
+      await navigator.clipboard.writeText(text);
+      setShareSuccess(true);
+      setTimeout(() => setShareSuccess(false), 3000);
+    }
+  };
+
 
   const drawRoute = useCallback((response: google.maps.DirectionsResult | null, status: google.maps.DirectionsStatus) => {
     console.log('Directions Response:', response, 'Status:', status);
@@ -246,6 +319,7 @@ const TripDetails: React.FC = () => {
               <motion.button
                 variants={itemVariants}
                 whileHover={{ scale: 1.05 }}
+                onClick={downloadItinerary}
                 className="flex items-center px-4 py-3 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-all"
               >
                 <Download className="h-5 w-5 mr-2" />
@@ -254,10 +328,15 @@ const TripDetails: React.FC = () => {
               <motion.button
                 variants={itemVariants}
                 whileHover={{ scale: 1.05 }}
-                className="flex items-center px-4 py-3 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-all"
+                onClick={shareItinerary}
+                className={`flex items-center px-4 py-3 rounded-lg transition-all ${
+                  shareSuccess
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
+                }`}
               >
                 <Share2 className="h-5 w-5 mr-2" />
-                <span>Share</span>
+                <span>{shareSuccess ? 'Copied! ✓' : 'Share'}</span>
               </motion.button>
             </div>
           </motion.div>

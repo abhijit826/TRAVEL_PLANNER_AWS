@@ -1,711 +1,468 @@
-import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import api from '../utils/api';
 import {
-  CreditCard,
-  FileText,
-  Plus,
-  Edit,
-  Trash2,
-  Lock,
-  Shield,
-  AlertCircle,
-  Syringe,
-  Car,
-  Globe,
-  User,
-  Briefcase,
+  CreditCard, FileText, Plus, Edit, Trash2, Lock, Shield,
+  AlertCircle, Syringe, Car, Globe, User, Briefcase, Camera,
+  CheckCircle, Phone, Mail, MapPin, Calendar, Hash, Info,
 } from 'lucide-react';
 
-// Define TravelDocument interface
 interface TravelDocument {
-  _id: string; // Changed from 'id' to '_id' for MongoDB
-  type: 'passport' | 'visa' | 'creditCard' | 'vaccination' | 'drivingLicense' | 'internationalPermit' | 'nationalId' | 'insurance';
+  _id: string;
+  type: 'passport'|'visa'|'creditCard'|'vaccination'|'drivingLicense'|'internationalPermit'|'nationalId'|'insurance';
   number: string;
   expiryDate: string;
+  issueDate?: string;
   country?: string;
-  embassy?: {
-    name: string;
-    address: string;
-    phone: string;
-    email: string;
-  };
+  nationality?: string;
   issuer?: string;
+  notes?: string;
+  photoUrl?: string;
+  // Visa
+  visaType?: string;
+  entries?: string;
+  // Card
+  bankName?: string;
+  cardType?: string;
+  // Vaccination
   vaccineType?: string;
+  manufacturer?: string;
+  lotNumber?: string;
   doseDates?: string[];
+  // Insurance
   insuranceProvider?: string;
   policyNumber?: string;
+  coverageAmount?: string;
+  emergencyPhone?: string;
   coverageDetails?: string;
+  // Driving
+  licenseClass?: string;
+  // Embassy
+  embassy?: { name: string; address: string; phone: string; email: string };
 }
 
-const TravelWallet: React.FC = () => {
+type DocType = TravelDocument['type'];
+
+const DOC_CONFIG: Record<DocType, { label: string; gradient: string; icon: React.ReactNode; bg: string }> = {
+  passport:          { label:'Passport',                   gradient:'from-blue-600 to-indigo-700',   icon:<FileText className="h-6 w-6"/>,  bg:'bg-blue-50' },
+  visa:              { label:'Visa',                       gradient:'from-green-500 to-teal-600',    icon:<Globe className="h-6 w-6"/>,     bg:'bg-green-50' },
+  creditCard:        { label:'Credit Card',               gradient:'from-purple-600 to-pink-600',   icon:<CreditCard className="h-6 w-6"/>,bg:'bg-purple-50' },
+  vaccination:       { label:'Vaccination Certificate',   gradient:'from-red-500 to-orange-500',    icon:<Syringe className="h-6 w-6"/>,   bg:'bg-red-50' },
+  drivingLicense:    { label:'Driving License',           gradient:'from-indigo-500 to-blue-600',   icon:<Car className="h-6 w-6"/>,       bg:'bg-indigo-50' },
+  internationalPermit:{ label:'International Permit',    gradient:'from-teal-500 to-cyan-600',     icon:<Globe className="h-6 w-6"/>,     bg:'bg-teal-50' },
+  nationalId:        { label:'National ID',               gradient:'from-orange-500 to-yellow-500', icon:<User className="h-6 w-6"/>,      bg:'bg-orange-50' },
+  insurance:         { label:'Insurance',                 gradient:'from-gray-600 to-slate-700',    icon:<Briefcase className="h-6 w-6"/>, bg:'bg-gray-50' },
+};
+
+const emptyForm = (): Partial<TravelDocument> => ({
+  type:'passport', number:'', expiryDate:'', issueDate:'', country:'', nationality:'',
+  issuer:'', notes:'', photoUrl:'', visaType:'', entries:'', bankName:'', cardType:'',
+  vaccineType:'', manufacturer:'', lotNumber:'', doseDates:[], insuranceProvider:'',
+  policyNumber:'', coverageAmount:'', emergencyPhone:'', coverageDetails:'', licenseClass:'',
+});
+
+const Field = ({ label, value, icon }: { label: string; value?: string; icon?: React.ReactNode }) =>
+  value ? (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide flex items-center gap-1">
+        {icon}{label}
+      </span>
+      <span className="text-gray-800 font-medium">{value}</span>
+    </div>
+  ) : null;
+
+const Input = ({ label, name, type='text', value, onChange, placeholder }: {
+  label:string; name:string; type?:string; value:string; onChange:(e:React.ChangeEvent<HTMLInputElement>)=>void; placeholder?:string;
+}) => (
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+    <input type={type} name={name} value={value} onChange={onChange} placeholder={placeholder}
+      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 focus:border-transparent outline-none transition" />
+  </div>
+);
+
+export default function TravelWallet() {
   const [documents, setDocuments] = useState<TravelDocument[]>([]);
-  const [selectedDocument, setSelectedDocument] = useState<TravelDocument | null>(null);
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [showEditForm, setShowEditForm] = useState(false);
-  const [formData, setFormData] = useState<Partial<TravelDocument>>({
-    type: 'passport',
-    number: '',
-    expiryDate: '',
-    country: '',
-    issuer: '',
-    vaccineType: '',
-    doseDates: [],
-    insuranceProvider: '',
-    policyNumber: '',
-    coverageDetails: '',
-  });
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [selected, setSelected] = useState<TravelDocument|null>(null);
+  const [mode, setMode] = useState<'view'|'add'|'edit'|'delete'>('view');
+  const [form, setForm] = useState<Partial<TravelDocument>>(emptyForm());
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string|null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  // Fetch documents on mount
-  useEffect(() => {
-    fetchDocuments();
-  }, []);
+  useEffect(() => { fetchDocs(); }, []);
 
-  const fetchDocuments = async () => {
+  // localStorage helpers for photos (too large for DynamoDB 400KB limit)
+  const PHOTO_KEY = 'wallet_photos';
+  const getPhotos = (): Record<string, string> => {
+    try { return JSON.parse(localStorage.getItem(PHOTO_KEY) || '{}'); } catch { return {}; }
+  };
+  const savePhoto = (id: string, url: string) => {
+    const p = getPhotos(); p[id] = url; localStorage.setItem(PHOTO_KEY, JSON.stringify(p));
+  };
+  const deletePhoto = (id: string) => {
+    const p = getPhotos(); delete p[id]; localStorage.setItem(PHOTO_KEY, JSON.stringify(p));
+  };
+  const mergePhotos = (docs: TravelDocument[]): TravelDocument[] => {
+    const photos = getPhotos();
+    return docs.map(d => ({ ...d, photoUrl: photos[d._id] || d.photoUrl }));
+  };
+
+  const fetchDocs = async () => {
     setLoading(true);
     try {
-      const response = await api.get('/api/travel-wallet/documents');
-      setDocuments(response.data);
-    } catch (err) {
-      setError('Failed to fetch documents');
-      console.error('Fetch error:', err);
-    } finally {
-      setLoading(false);
+      const r = await api.get('/api/travel-wallet/documents');
+      setDocuments(mergePhotos(r.data));
     }
+    catch { setError('Failed to load documents'); }
+    finally { setLoading(false); }
   };
 
-  const getDocumentIcon = (type: string) => {
-    switch (type) {
-      case 'passport': return <FileText className="h-6 w-6 text-blue-500" />;
-      case 'visa': return <FileText className="h-6 w-6 text-green-500" />;
-      case 'creditCard': return <CreditCard className="h-6 w-6 text-purple-500" />;
-      case 'vaccination': return <Syringe className="h-6 w-6 text-red-500" />;
-      case 'drivingLicense': return <Car className="h-6 w-6 text-indigo-500" />;
-      case 'internationalPermit': return <Globe className="h-6 w-6 text-teal-500" />;
-      case 'nationalId': return <User className="h-6 w-6 text-orange-500" />;
-      case 'insurance': return <Briefcase className="h-6 w-6 text-gray-500" />;
-      default: return <FileText className="h-6 w-6 text-gray-500" />;
-    }
+  const getExpiry = (d: string) => {
+    const exp = new Date(d), now = new Date();
+    const months = (exp.getFullYear()-now.getFullYear())*12+(exp.getMonth()-now.getMonth());
+    if (exp < now) return { label:'Expired', cls:'bg-red-100 text-red-700' };
+    if (months <= 3) return { label:'Expiring Soon', cls:'bg-yellow-100 text-yellow-700' };
+    return { label:'Valid', cls:'bg-green-100 text-green-700' };
   };
 
-  const getDocumentTitle = (type: string) => {
-    switch (type) {
-      case 'passport': return 'Passport';
-      case 'visa': return 'Visa';
-      case 'creditCard': return 'Credit Card';
-      case 'vaccination': return 'Vaccination Certificate';
-      case 'drivingLicense': return 'Driving License';
-      case 'internationalPermit': return 'International Driving Permit';
-      case 'nationalId': return 'National ID Card';
-      case 'insurance': return 'Insurance Details';
-      default: return 'Document';
-    }
+  const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setForm(f => ({ ...f, photoUrl: reader.result as string }));
+    reader.readAsDataURL(file);
   };
 
-  const getExpiryStatus = (expiryDate: string) => {
-    const expiry = new Date(expiryDate);
-    const now = new Date();
-    const monthsUntilExpiry = (expiry.getFullYear() - now.getFullYear()) * 12 + (expiry.getMonth() - now.getMonth());
-    if (expiry < now) return { status: 'expired', className: 'bg-red-100 text-red-800' };
-    if (monthsUntilExpiry <= 3) return { status: 'expiring soon', className: 'bg-yellow-100 text-yellow-800' };
-    return { status: 'valid', className: 'bg-green-100 text-green-800' };
-  };
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) =>
+    setForm(f => ({ ...f, [e.target.name]: e.target.value }));
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
-  };
+  const openAdd = () => { setForm(emptyForm()); setSelected(null); setMode('add'); };
+  const openEdit = () => { if (!selected) return; setForm({ ...selected, expiryDate: selected.expiryDate.split('T')[0], issueDate: selected.issueDate?.split('T')[0]||'' }); setMode('edit'); };
 
-  const resetForm = () => {
-    setFormData({
-      type: 'passport',
-      number: '',
-      expiryDate: '',
-      country: '',
-      issuer: '',
-      vaccineType: '',
-      doseDates: [],
-      insuranceProvider: '',
-      policyNumber: '',
-      coverageDetails: '',
-    });
-    setShowAddForm(false);
-    setShowEditForm(false);
-  };
-
-  const handleAddDocument = async () => {
-    if (!formData.number || !formData.expiryDate) {
-      alert('Please fill in all required fields');
-      return;
-    }
-
-    const newDocument: Partial<TravelDocument> = {
-      type: formData.type as TravelDocument['type'],
-      number: formData.number,
-      expiryDate: formData.expiryDate,
-      country: formData.country || undefined,
-      issuer: formData.issuer || undefined,
-      vaccineType: formData.vaccineType || undefined,
-      doseDates: formData.doseDates || undefined,
-      insuranceProvider: formData.insuranceProvider || undefined,
-      policyNumber: formData.policyNumber || undefined,
-      coverageDetails: formData.coverageDetails || undefined,
-    };
-
-    if (formData.type === 'visa' && formData.country) {
-      newDocument.embassy = {
-        name: `Embassy of ${formData.country}`,
-        address: 'Address will be fetched from API',
-        phone: '+1 123-456-7890',
-        email: `info@${formData.country.toLowerCase().replace(/\s+/g, '')}.embassy.com`,
-      };
-    }
-
+  const save = async () => {
+    if (!form.number || !form.expiryDate) { alert('Document number and expiry date are required'); return; }
+    // Strip photoUrl before sending to backend (stored in localStorage instead)
+    const { photoUrl, ...payload } = form;
     try {
-      const response = await api.post('/api/travel-wallet/documents', newDocument);
-      setDocuments([...documents, response.data]);
-      setSelectedDocument(response.data);
-      resetForm();
-    } catch (error) {
-      console.error('Error adding document:', error);
-      alert('Failed to add document');
+      if (mode === 'add') {
+        const r = await api.post('/api/travel-wallet/documents', payload);
+        const docWithPhoto = { ...r.data, photoUrl: photoUrl || '' };
+        if (photoUrl) savePhoto(r.data._id, photoUrl);
+        setDocuments(d => [...d, docWithPhoto]);
+        setSelected(docWithPhoto);
+      } else {
+        const r = await api.put(`/api/travel-wallet/documents/${selected!._id}`, payload);
+        const docWithPhoto = { ...r.data, photoUrl: photoUrl || selected?.photoUrl || '' };
+        if (photoUrl) savePhoto(r.data._id, photoUrl);
+        setDocuments(d => d.map(x => x._id === selected!._id ? docWithPhoto : x));
+        setSelected(docWithPhoto);
+      }
+      setMode('view');
+    } catch (err: any) {
+      alert('Failed to save document: ' + (err?.response?.data?.message || err?.message || 'Unknown error'));
     }
   };
 
-  const handleEditDocument = async () => {
-    if (!selectedDocument || !formData.number || !formData.expiryDate) {
-      alert('Please fill in all required fields');
-      return;
-    }
-
-    const updatedDocument: Partial<TravelDocument> = {
-      type: formData.type as TravelDocument['type'],
-      number: formData.number,
-      expiryDate: formData.expiryDate,
-      country: formData.country || undefined,
-      issuer: formData.issuer || undefined,
-      vaccineType: formData.vaccineType || undefined,
-      doseDates: formData.doseDates || selectedDocument.doseDates,
-      insuranceProvider: formData.insuranceProvider || undefined,
-      policyNumber: formData.policyNumber || undefined,
-      coverageDetails: formData.coverageDetails || undefined,
-    };
-
-    if (formData.type === 'visa' && formData.country) {
-      updatedDocument.embassy = selectedDocument.embassy || {
-        name: `Embassy of ${formData.country}`,
-        address: 'Address will be fetched from API',
-        phone: '+1 123-456-7890',
-        email: `info@${formData.country.toLowerCase().replace(/\s+/g, '')}.embassy.com`,
-      };
-    } else {
-      delete updatedDocument.embassy;
-    }
-
+  const del = async () => {
+    if (!selected) return;
     try {
-      const response = await api.put(
-        `/api/travel-wallet/documents/${selectedDocument._id}`,
-        updatedDocument
-      );
-      const updatedDocs = documents.map((doc) =>
-        doc._id === selectedDocument._id ? response.data : doc
-      );
-      setDocuments(updatedDocs);
-      setSelectedDocument(response.data);
-      setShowEditForm(false);
-    } catch (error) {
-      console.error('Error updating document:', error);
-      alert('Failed to update document');
-    }
+      await api.delete(`/api/travel-wallet/documents/${selected._id}`);
+      deletePhoto(selected._id);  // clean up localStorage photo
+      setDocuments(d => d.filter(x => x._id !== selected._id));
+      setSelected(null); setMode('view');
+    } catch { alert('Failed to delete'); }
   };
 
-  const handleDeleteDocument = async () => {
-    if (!selectedDocument) return;
+  const cfg = (t: DocType) => DOC_CONFIG[t];
 
-    try {
-      await api.delete(`/api/travel-wallet/documents/${selectedDocument._id}`);
-      const updatedDocs = documents.filter((doc) => doc._id !== selectedDocument._id);
-      setDocuments(updatedDocs);
-      setSelectedDocument(null);
-      setShowDeleteConfirm(false);
-    } catch (error) {
-      console.error('Error deleting document:', error);
-      alert('Failed to delete document');
-    }
+  // ── Document Card (physical card style) ──────────────────────────────────
+  const DocCard = ({ doc }: { doc: TravelDocument }) => {
+    const c = cfg(doc.type);
+    const exp = getExpiry(doc.expiryDate);
+    return (
+      <motion.div whileHover={{ scale: 1.02, y: -2 }} whileTap={{ scale: 0.98 }}
+        onClick={() => { setSelected(doc); setMode('view'); }}
+        className={`relative cursor-pointer rounded-2xl overflow-hidden shadow-md border-2 transition-all ${
+          selected?._id===doc._id ? 'border-indigo-400 shadow-indigo-200' : 'border-transparent'}`}>
+        <div className={`bg-gradient-to-br ${c.gradient} p-5 text-white`}>
+          <div className="flex justify-between items-start mb-8">
+            <div className="bg-white/20 backdrop-blur-sm rounded-xl p-2">{c.icon}</div>
+            <span className={`text-xs px-2 py-1 rounded-full font-semibold ${exp.cls}`}>{exp.label}</span>
+          </div>
+          {doc.photoUrl && (
+            <img src={doc.photoUrl} alt="doc" className="absolute top-3 right-12 w-10 h-10 rounded-full object-cover border-2 border-white/50" />
+          )}
+          <p className="text-white/70 text-xs mb-1">{c.label}</p>
+          <p className="font-mono text-sm tracking-widest truncate">{doc.number}</p>
+          <div className="flex justify-between mt-3 text-xs text-white/80">
+            <span>{doc.country || doc.nationality || ''}</span>
+            <span>Exp: {new Date(doc.expiryDate).toLocaleDateString('en-US',{month:'short',year:'numeric'})}</span>
+          </div>
+        </div>
+      </motion.div>
+    );
   };
 
-  const startEditDocument = () => {
-    if (!selectedDocument) return;
-    setFormData({
-      type: selectedDocument.type,
-      number: selectedDocument.number,
-      expiryDate: selectedDocument.expiryDate.split('T')[0], // Format for input type="date"
-      country: selectedDocument.country || '',
-      issuer: selectedDocument.issuer || '',
-      vaccineType: selectedDocument.vaccineType || '',
-      doseDates: selectedDocument.doseDates || [],
-      insuranceProvider: selectedDocument.insuranceProvider || '',
-      policyNumber: selectedDocument.policyNumber || '',
-      coverageDetails: selectedDocument.coverageDetails || '',
-    });
-    setShowEditForm(true);
-  };
-
-  const renderForm = () => (
-    <form className="space-y-6">
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Document Type</label>
-        <select
-          name="type"
-          value={formData.type || ''}
-          onChange={handleInputChange}
-          className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
-        >
-          <option value="passport">Passport</option>
-          <option value="visa">Visa</option>
-          <option value="creditCard">Credit Card</option>
-          <option value="vaccination">Vaccination Certificate</option>
-          <option value="drivingLicense">Driving License</option>
-          <option value="internationalPermit">International Driving Permit</option>
-          <option value="nationalId">National ID Card</option>
-          <option value="insurance">Insurance Details</option>
-        </select>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Document Number</label>
-        <input
-          type="text"
-          name="number"
-          value={formData.number || ''}
-          onChange={handleInputChange}
-          className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
-          placeholder="Enter document number"
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Expiry Date</label>
-        <input
-          type="date"
-          name="expiryDate"
-          value={formData.expiryDate || ''}
-          onChange={handleInputChange}
-          className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
-        />
-      </div>
-
-      {(formData.type === 'passport' || formData.type === 'visa' || formData.type === 'vaccination' ||
-        formData.type === 'drivingLicense' || formData.type === 'internationalPermit' || formData.type === 'nationalId') && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
-          <input
-            type="text"
-            name="country"
-            value={formData.country || ''}
-            onChange={handleInputChange}
-            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
-            placeholder="Enter country"
-          />
-        </div>
-      )}
-
-      {(formData.type === 'vaccination' || formData.type === 'drivingLicense' ||
-        formData.type === 'internationalPermit' || formData.type === 'nationalId') && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Issuer</label>
-          <input
-            type="text"
-            name="issuer"
-            value={formData.issuer || ''}
-            onChange={handleInputChange}
-            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
-            placeholder="Enter issuer"
-          />
-        </div>
-      )}
-
-      {formData.type === 'vaccination' && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Vaccine Type</label>
-          <input
-            type="text"
-            name="vaccineType"
-            value={formData.vaccineType || ''}
-            onChange={handleInputChange}
-            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
-            placeholder="Enter vaccine type"
-          />
-        </div>
-      )}
-
-      {formData.type === 'insurance' && (
-        <>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Insurance Provider</label>
-            <input
-              type="text"
-              name="insuranceProvider"
-              value={formData.insuranceProvider || ''}
-              onChange={handleInputChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
-              placeholder="Enter insurance provider"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Policy Number</label>
-            <input
-              type="text"
-              name="policyNumber"
-              value={formData.policyNumber || ''}
-              onChange={handleInputChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
-              placeholder="Enter policy number"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Coverage Details</label>
-            <input
-              type="text"
-              name="coverageDetails"
-              value={formData.coverageDetails || ''}
-              onChange={handleInputChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
-              placeholder="Enter coverage details"
-            />
-          </div>
-        </>
-      )}
-
-      <div className="flex justify-end space-x-3">
-        <button
-          type="button"
-          onClick={resetForm}
-          className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          onClick={showEditForm ? handleEditDocument : handleAddDocument}
-          className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
-        >
-          {showEditForm ? 'Update Document' : 'Add Document'}
-        </button>
-      </div>
-    </form>
-  );
-
-  const renderDeleteConfirmation = () => (
-    <div className="p-6 bg-white rounded-xl shadow-lg">
-      <h3 className="text-xl font-bold text-gray-900 mb-4">Confirm Deletion</h3>
-      <p className="text-gray-600 mb-6">
-        Are you sure you want to delete this {selectedDocument?.type}? This action cannot be undone.
-      </p>
-      <div className="flex justify-end space-x-3">
-        <button
-          onClick={() => setShowDeleteConfirm(false)}
-          className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={handleDeleteDocument}
-          className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700"
-        >
-          Delete
-        </button>
-      </div>
-    </div>
-  );
-
-  return (
-    <div className="max-w-6xl mx-auto px-4 py-12">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Travel Wallet</h1>
-        <p className="text-gray-600">
-          Securely store and manage your travel documents in one place.
-        </p>
-      </div>
-
-      {loading && <p className="text-gray-600">Loading documents...</p>}
-      {error && <p className="text-red-600">{error}</p>}
-
-      <div className="bg-indigo-50 rounded-xl p-6 mb-8">
-        <div className="flex items-start">
-          <div className="bg-indigo-100 p-3 rounded-full">
-            <Shield className="h-6 w-6 text-indigo-600" />
-          </div>
-          <div className="ml-4">
-            <h2 className="text-lg font-medium text-gray-900">Blockchain-Secured Documents</h2>
-            <p className="text-gray-600 mt-1">
-              Your documents are encrypted and secured using blockchain technology.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-1 bg-white rounded-xl shadow-lg overflow-hidden">
-          <div className="p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-gray-900">Your Documents</h2>
-              <button
-                onClick={() => {
-                  setShowAddForm(true);
-                  setShowEditForm(false);
-                  setSelectedDocument(null);
-                }}
-                className="p-2 bg-indigo-100 text-indigo-600 rounded-full hover:bg-indigo-200"
-                title="Add new document"
-              >
-                <Plus className="h-5 w-5" />
-              </button>
+  // ── Detail Panel ──────────────────────────────────────────────────────────
+  const DetailPanel = () => {
+    if (!selected) return null;
+    const c = cfg(selected.type);
+    const exp = getExpiry(selected.expiryDate);
+    return (
+      <motion.div initial={{ opacity:0, x:20 }} animate={{ opacity:1, x:0 }} className="bg-white rounded-2xl shadow-xl overflow-hidden">
+        {/* Header */}
+        <div className={`bg-gradient-to-r ${c.gradient} p-6 text-white`}>
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-white/70 text-sm">{c.label}</p>
+              <h2 className="text-2xl font-bold mt-1">{selected.country || selected.nationality || selected.bankName || 'Document'}</h2>
             </div>
-
-            {documents.length === 0 && !loading ? (
-              <div className="text-center py-8">
-                <p className="text-gray-500">No documents yet. Add your first document.</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {documents.map((doc) => {
-                  const expiryStatus = getExpiryStatus(doc.expiryDate);
-                  return (
-                    <motion.div
-                      key={doc._id} // Changed from id to _id
-                      whileHover={{ scale: 1.02 }}
-                      className={`p-4 rounded-lg cursor-pointer ${
-                        selectedDocument?._id === doc._id
-                          ? 'bg-indigo-50 border border-indigo-200'
-                          : 'bg-gray-50 hover:bg-gray-100'
-                      }`}
-                      onClick={() => {
-                        setSelectedDocument(doc);
-                        setShowAddForm(false);
-                        setShowEditForm(false);
-                        setShowDeleteConfirm(false);
-                      }}
-                    >
-                      <div className="flex items-center">
-                        <div className="p-2 bg-white rounded-lg shadow-sm">
-                          {getDocumentIcon(doc.type)}
-                        </div>
-                        <div className="ml-4 flex-grow">
-                          <h3 className="font-medium text-gray-900">{getDocumentTitle(doc.type)}</h3>
-                          <div className="flex items-center text-sm text-gray-600">
-                            <span>Expires: {new Date(doc.expiryDate).toLocaleDateString()}</span>
-                            <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${expiryStatus.className}`}>
-                              {expiryStatus.status}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </div>
-            )}
+            <div className="flex gap-2">
+              <button onClick={openEdit} className="p-2 bg-white/20 hover:bg-white/30 rounded-xl transition"><Edit className="h-4 w-4"/></button>
+              <button onClick={() => setMode('delete')} className="p-2 bg-white/20 hover:bg-white/30 rounded-xl transition"><Trash2 className="h-4 w-4"/></button>
+            </div>
           </div>
-        </div>
-
-        <div className="lg:col-span-2">
-          {selectedDocument && !showEditForm && !showDeleteConfirm ? (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="bg-white rounded-xl shadow-lg overflow-hidden h-full"
-            >
-              <div className="p-6">
-                <div className="flex justify-between items-center mb-6">
-                  <div className="flex items-center">
-                    {getDocumentIcon(selectedDocument.type)}
-                    <h2 className="text-2xl font-bold text-gray-900 ml-2">
-                      {getDocumentTitle(selectedDocument.type)}
-                    </h2>
-                  </div>
-                  <div className="flex space-x-2">
-                    <button
-                      className="p-2 bg-gray-100 text-gray-600 rounded-full hover:bg-gray-200"
-                      onClick={startEditDocument}
-                      title="Edit document"
-                    >
-                      <Edit className="h-5 w-5" />
-                    </button>
-                    <button
-                      className="p-2 bg-gray-100 text-gray-600 rounded-full hover:bg-gray-200"
-                      onClick={() => setShowDeleteConfirm(true)}
-                      title="Delete document"
-                    >
-                      <Trash2 className="h-5 w-5" />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="bg-gray-50 rounded-lg p-6 mb-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <p className="text-sm text-gray-500 mb-1">Document Number</p>
-                      <div className="flex items-center">
-                        <p className="text-lg font-medium text-gray-900">{selectedDocument.number}</p>
-                        <Lock className="h-4 w-4 text-gray-400 ml-2" />
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500 mb-1">Expiry Date</p>
-                      <p className="text-lg font-medium text-gray-900">
-                        {new Date(selectedDocument.expiryDate).toLocaleDateString()}
-                      </p>
-                    </div>
-                    {selectedDocument.country && (
-                      <div>
-                        <p className="text-sm text-gray-500 mb-1">Country</p>
-                        <p className="text-lg font-medium text-gray-900">{selectedDocument.country}</p>
-                      </div>
-                    )}
-                    {selectedDocument.issuer && (
-                      <div>
-                        <p className="text-sm text-gray-500 mb-1">Issuer</p>
-                        <p className="text-lg font-medium text-gray-900">{selectedDocument.issuer}</p>
-                      </div>
-                    )}
-                    {selectedDocument.vaccineType && (
-                      <div>
-                        <p className="text-sm text-gray-500 mb-1">Vaccine Type</p>
-                        <p className="text-lg font-medium text-gray-900">{selectedDocument.vaccineType}</p>
-                      </div>
-                    )}
-                    {selectedDocument.insuranceProvider && (
-                      <div>
-                        <p className="text-sm text-gray-500 mb-1">Insurance Provider</p>
-                        <p className="text-lg font-medium text-gray-900">{selectedDocument.insuranceProvider}</p>
-                      </div>
-                    )}
-                    {selectedDocument.policyNumber && (
-                      <div>
-                        <p className="text-sm text-gray-500 mb-1">Policy Number</p>
-                        <p className="text-lg font-medium text-gray-900">{selectedDocument.policyNumber}</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {selectedDocument.type === 'visa' && selectedDocument.embassy && (
-                  <div className="mb-6">
-                    <h3 className="text-lg font-medium text-gray-900 mb-3">Embassy Information</h3>
-                    <div className="bg-gray-50 rounded-lg p-6">
-                      <p className="font-medium text-gray-900">{selectedDocument.embassy.name}</p>
-                      <p className="text-gray-600 mt-1">{selectedDocument.embassy.address}</p>
-                      <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
-                        <div className="flex items-center text-gray-600">
-                          <span>Phone: {selectedDocument.embassy.phone}</span>
-                        </div>
-                        <div className="flex items-center text-gray-600">
-                          <span>Email: {selectedDocument.embassy.email}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {selectedDocument.doseDates && selectedDocument.doseDates.length > 0 && (
-                  <div className="mb-6">
-                    <h3 className="text-lg font-medium text-gray-900 mb-3">Vaccination Details</h3>
-                    <div className="bg-gray-50 rounded-lg p-6">
-                      <div className="grid grid-cols-1 gap-2">
-                        {selectedDocument.doseDates.map((date, index) => (
-                          <p key={index} className="text-gray-600">
-                            Dose {index + 1}: {new Date(date).toLocaleDateString()}
-                          </p>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {selectedDocument.coverageDetails && (
-                  <div className="mb-6">
-                    <h3 className="text-lg font-medium text-gray-900 mb-3">Coverage Details</h3>
-                    <div className="bg-gray-50 rounded-lg p-6">
-                      <p className="text-gray-600">{selectedDocument.coverageDetails}</p>
-                    </div>
-                  </div>
-                )}
-
-                {(selectedDocument.type === 'visa' || selectedDocument.type === 'vaccination' ||
-                  selectedDocument.type === 'drivingLicense' || selectedDocument.type === 'internationalPermit' ||
-                  selectedDocument.type === 'nationalId' || selectedDocument.type === 'insurance') &&
-                  getExpiryStatus(selectedDocument.expiryDate).status !== 'valid' && (
-                  <div className="bg-yellow-50 border border-yellow-100 rounded-lg p-4">
-                    <div className="flex items-start">
-                      <AlertCircle className="h-5 w-5 text-yellow-500 mt-0.5" />
-                      <div className="ml-3">
-                        <h3 className="text-sm font-medium text-yellow-800">
-                          {selectedDocument.type.charAt(0).toUpperCase() + selectedDocument.type.slice(1)} Expiring Soon
-                        </h3>
-                        <p className="text-sm text-yellow-700 mt-1">
-                          Your {getDocumentTitle(selectedDocument.type).toLowerCase()} is expiring on{' '}
-                          {new Date(selectedDocument.expiryDate).toLocaleDateString()}. Consider renewing it.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          ) : showAddForm || showEditForm ? (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="bg-white rounded-xl shadow-lg overflow-hidden h-full"
-            >
-              <div className="p-6">
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-2xl font-bold text-gray-900">
-                    {showEditForm ? 'Edit Document' : 'Add New Document'}
-                  </h2>
-                </div>
-                {renderForm()}
-              </div>
-            </motion.div>
-          ) : showDeleteConfirm ? (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="bg-white rounded-xl shadow-lg overflow-hidden h-full"
-            >
-              {renderDeleteConfirmation()}
-            </motion.div>
+          {/* Photo */}
+          {selected.photoUrl ? (
+            <img src={selected.photoUrl} alt="Document" className="mt-4 w-full h-40 object-cover rounded-xl border-2 border-white/30" />
           ) : (
-            <div className="bg-white rounded-xl shadow-lg overflow-hidden h-full flex items-center justify-center p-6">
-              <div className="text-center">
-                <div className="bg-indigo-100 p-3 rounded-full inline-block mb-4">
-                  <CreditCard className="h-8 w-8 text-indigo-600" />
-                </div>
-                <h3 className="text-xl font-medium text-gray-700 mb-2">Select a Document</h3>
-                <p className="text-gray-500 mb-6">
-                  Choose a document from the list to view details or add a new one.
-                </p>
-                <button
-                  onClick={() => {
-                    setShowAddForm(true);
-                    setShowEditForm(false);
-                  }}
-                  className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 inline-flex items-center"
-                >
-                  <Plus className="h-5 w-5 mr-2" />
-                  <span>Add New Document</span>
-                </button>
-              </div>
+            <div className="mt-4 h-32 bg-white/10 rounded-xl flex items-center justify-center border-2 border-dashed border-white/30">
+              <div className="text-center text-white/60"><Camera className="h-8 w-8 mx-auto mb-1"/><p className="text-xs">No photo added</p></div>
             </div>
           )}
         </div>
+
+        <div className="p-6 space-y-4">
+          {/* Status */}
+          <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold ${exp.cls}`}>
+            {exp.label==='Valid' ? <CheckCircle className="h-4 w-4"/> : <AlertCircle className="h-4 w-4"/>}
+            {exp.label} · Expires {new Date(selected.expiryDate).toLocaleDateString()}
+          </div>
+
+          {/* Core fields */}
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Document No." value={selected.number} icon={<Lock className="h-3 w-3"/>}/>
+            <Field label="Expires" value={new Date(selected.expiryDate).toLocaleDateString()} icon={<Calendar className="h-3 w-3"/>}/>
+            {selected.issueDate && <Field label="Issue Date" value={new Date(selected.issueDate).toLocaleDateString()} icon={<Calendar className="h-3 w-3"/>}/>}
+            <Field label="Country" value={selected.country} icon={<Globe className="h-3 w-3"/>}/>
+            <Field label="Nationality" value={selected.nationality} icon={<User className="h-3 w-3"/>}/>
+            <Field label="Issued By" value={selected.issuer} icon={<Info className="h-3 w-3"/>}/>
+            {/* Visa */}
+            <Field label="Visa Type" value={selected.visaType} icon={<FileText className="h-3 w-3"/>}/>
+            <Field label="Entries" value={selected.entries} icon={<Hash className="h-3 w-3"/>}/>
+            {/* Card */}
+            <Field label="Bank" value={selected.bankName} icon={<CreditCard className="h-3 w-3"/>}/>
+            <Field label="Card Type" value={selected.cardType} icon={<CreditCard className="h-3 w-3"/>}/>
+            {/* Vaccination */}
+            <Field label="Vaccine" value={selected.vaccineType} icon={<Syringe className="h-3 w-3"/>}/>
+            <Field label="Manufacturer" value={selected.manufacturer}/>
+            <Field label="Lot No." value={selected.lotNumber} icon={<Hash className="h-3 w-3"/>}/>
+            {/* Driving */}
+            <Field label="License Class" value={selected.licenseClass} icon={<Car className="h-3 w-3"/>}/>
+            {/* Insurance */}
+            <Field label="Provider" value={selected.insuranceProvider} icon={<Shield className="h-3 w-3"/>}/>
+            <Field label="Policy No." value={selected.policyNumber} icon={<Hash className="h-3 w-3"/>}/>
+            <Field label="Coverage" value={selected.coverageAmount}/>
+            <Field label="Emergency" value={selected.emergencyPhone} icon={<Phone className="h-3 w-3"/>}/>
+          </div>
+
+          {selected.doseDates && selected.doseDates.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-400 uppercase mb-2">Dose Dates</p>
+              <div className="space-y-1">
+                {selected.doseDates.map((d,i) => <p key={i} className="text-sm text-gray-700">Dose {i+1}: {new Date(d).toLocaleDateString()}</p>)}
+              </div>
+            </div>
+          )}
+
+          {selected.coverageDetails && (
+            <div><p className="text-xs font-semibold text-gray-400 uppercase mb-1">Coverage Details</p>
+            <p className="text-sm text-gray-700 bg-gray-50 rounded-lg p-3">{selected.coverageDetails}</p></div>
+          )}
+
+          {selected.embassy && (
+            <div className="bg-blue-50 rounded-xl p-4">
+              <p className="text-xs font-semibold text-blue-400 uppercase mb-2">Embassy</p>
+              <p className="font-semibold text-gray-800">{selected.embassy.name}</p>
+              <div className="mt-2 space-y-1 text-sm text-gray-600">
+                <p className="flex items-center gap-2"><MapPin className="h-3 w-3"/>{selected.embassy.address}</p>
+                <p className="flex items-center gap-2"><Phone className="h-3 w-3"/>{selected.embassy.phone}</p>
+                <p className="flex items-center gap-2"><Mail className="h-3 w-3"/>{selected.embassy.email}</p>
+              </div>
+            </div>
+          )}
+
+          {selected.notes && (
+            <div><p className="text-xs font-semibold text-gray-400 uppercase mb-1">Notes</p>
+            <p className="text-sm text-gray-700 bg-yellow-50 rounded-lg p-3 border border-yellow-100">{selected.notes}</p></div>
+          )}
+        </div>
+      </motion.div>
+    );
+  };
+
+  // ── Form ─────────────────────────────────────────────────────────────────
+  const FormPanel = () => (
+    <motion.div initial={{ opacity:0, x:20 }} animate={{ opacity:1, x:0 }} className="bg-white rounded-2xl shadow-xl overflow-hidden">
+      <div className={`bg-gradient-to-r ${cfg(form.type as DocType || 'passport').gradient} p-6 text-white`}>
+        <h2 className="text-xl font-bold">{mode==='edit' ? 'Edit Document' : 'Add New Document'}</h2>
+        <p className="text-white/70 text-sm mt-1">Fill in the details for your document</p>
+      </div>
+      <div className="p-6 space-y-4 max-h-[65vh] overflow-y-auto">
+        {/* Photo upload */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Document Photo</label>
+          <div onClick={() => fileRef.current?.click()}
+            className="cursor-pointer border-2 border-dashed border-gray-300 rounded-xl p-4 flex flex-col items-center hover:border-indigo-400 hover:bg-indigo-50 transition">
+            {form.photoUrl ? (
+              <img src={form.photoUrl} alt="preview" className="w-full h-32 object-cover rounded-lg"/>
+            ) : (
+              <><Camera className="h-8 w-8 text-gray-400 mb-2"/><p className="text-sm text-gray-500">Click to upload photo</p></>
+            )}
+          </div>
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handlePhoto}/>
+        </div>
+
+        {/* Type */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Document Type</label>
+          <select name="type" value={form.type||'passport'} onChange={handleChange}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 outline-none">
+            {Object.entries(DOC_CONFIG).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
+          </select>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Input label="Document Number *" name="number" value={form.number||''} onChange={handleChange} placeholder="e.g. A1234567"/>
+          <Input label="Expiry Date *" name="expiryDate" type="date" value={form.expiryDate||''} onChange={handleChange}/>
+          <Input label="Issue Date" name="issueDate" type="date" value={form.issueDate||''} onChange={handleChange}/>
+          <Input label="Country" name="country" value={form.country||''} onChange={handleChange} placeholder="India"/>
+          <Input label="Nationality" name="nationality" value={form.nationality||''} onChange={handleChange} placeholder="Indian"/>
+          <Input label="Issued By" name="issuer" value={form.issuer||''} onChange={handleChange} placeholder="Issuing authority"/>
+        </div>
+
+        {(form.type==='visa') && (
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Visa Type" name="visaType" value={form.visaType||''} onChange={handleChange} placeholder="Tourist / Business"/>
+            <Input label="Entries" name="entries" value={form.entries||''} onChange={handleChange} placeholder="Single / Multiple"/>
+          </div>
+        )}
+        {form.type==='creditCard' && (
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Bank Name" name="bankName" value={form.bankName||''} onChange={handleChange} placeholder="HDFC / SBI"/>
+            <Input label="Card Type" name="cardType" value={form.cardType||''} onChange={handleChange} placeholder="Visa / Mastercard"/>
+          </div>
+        )}
+        {form.type==='vaccination' && (
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Vaccine Name" name="vaccineType" value={form.vaccineType||''} onChange={handleChange} placeholder="Covishield"/>
+            <Input label="Manufacturer" name="manufacturer" value={form.manufacturer||''} onChange={handleChange} placeholder="AstraZeneca"/>
+            <Input label="Lot Number" name="lotNumber" value={form.lotNumber||''} onChange={handleChange} placeholder="4120Z001"/>
+          </div>
+        )}
+        {form.type==='drivingLicense' && (
+          <Input label="License Class" name="licenseClass" value={form.licenseClass||''} onChange={handleChange} placeholder="LMV / HMV"/>
+        )}
+        {form.type==='insurance' && (
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Provider" name="insuranceProvider" value={form.insuranceProvider||''} onChange={handleChange} placeholder="LIC / Star Health"/>
+            <Input label="Policy Number" name="policyNumber" value={form.policyNumber||''} onChange={handleChange}/>
+            <Input label="Coverage Amount" name="coverageAmount" value={form.coverageAmount||''} onChange={handleChange} placeholder="₹5,00,000"/>
+            <Input label="Emergency Phone" name="emergencyPhone" value={form.emergencyPhone||''} onChange={handleChange} placeholder="+91 1800..."/>
+          </div>
+        )}
+
+        {/* Notes */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+          <textarea name="notes" value={form.notes||''} onChange={handleChange} rows={2}
+            placeholder="Any additional notes..."
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 outline-none resize-none"/>
+        </div>
+
+        <div className="flex gap-3 pt-2">
+          <button onClick={() => { setMode('view'); setForm(emptyForm()); }}
+            className="flex-1 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 text-sm transition">Cancel</button>
+          <button onClick={save}
+            className={`flex-1 py-2 rounded-lg text-white text-sm font-semibold transition bg-gradient-to-r ${cfg(form.type as DocType||'passport').gradient} hover:opacity-90`}>
+            {mode==='edit' ? 'Update' : 'Add Document'}
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  );
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-950 to-purple-950 py-10 px-4">
+      {/* Header */}
+      <div className="max-w-6xl mx-auto mb-8">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-extrabold text-white">✈️ Travel Wallet</h1>
+            <p className="text-indigo-300 mt-1">Securely store all your travel documents</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 bg-white/10 backdrop-blur px-3 py-2 rounded-xl text-white/80 text-sm">
+              <Shield className="h-4 w-4 text-green-400"/><span>{documents.length} docs secured</span>
+            </div>
+            <motion.button whileHover={{ scale:1.05 }} whileTap={{ scale:0.95 }} onClick={openAdd}
+              className="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-xl font-semibold text-sm transition">
+              <Plus className="h-4 w-4"/> Add Document
+            </motion.button>
+          </div>
+        </div>
+      </div>
+
+      {loading && <p className="text-center text-indigo-300 mb-4">Loading documents...</p>}
+      {error && <p className="text-center text-red-400 mb-4">{error}</p>}
+
+      <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-5 gap-6">
+        {/* Left: cards list */}
+        <div className="lg:col-span-2 space-y-3">
+          {documents.length === 0 && !loading ? (
+            <div className="text-center py-16 text-indigo-300">
+              <Lock className="h-12 w-12 mx-auto mb-3 opacity-40"/>
+              <p className="font-medium">No documents yet</p>
+              <p className="text-sm opacity-60 mt-1">Add your first travel document</p>
+            </div>
+          ) : (
+            documents.map(doc => <DocCard key={doc._id} doc={doc}/>)
+          )}
+        </div>
+
+        {/* Right: detail / form */}
+        <div className="lg:col-span-3">
+          <AnimatePresence mode="wait">
+            {(mode==='add'||mode==='edit') ? (
+              <FormPanel key="form"/>
+            ) : mode==='delete' && selected ? (
+              <motion.div key="del" initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
+                className="bg-white rounded-2xl shadow-xl p-8 text-center">
+                <div className="bg-red-100 p-4 rounded-full inline-flex mb-4"><Trash2 className="h-8 w-8 text-red-600"/></div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">Delete Document?</h3>
+                <p className="text-gray-500 mb-6">This will permanently remove your <strong>{cfg(selected.type).label}</strong>. This cannot be undone.</p>
+                <div className="flex gap-3 justify-center">
+                  <button onClick={() => setMode('view')} className="px-6 py-2 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50">Cancel</button>
+                  <button onClick={del} className="px-6 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700">Delete</button>
+                </div>
+              </motion.div>
+            ) : selected ? (
+              <DetailPanel key={selected._id}/>
+            ) : (
+              <motion.div key="empty" initial={{ opacity:0 }} animate={{ opacity:1 }}
+                className="h-full flex flex-col items-center justify-center text-center py-20 bg-white/5 backdrop-blur rounded-2xl border border-white/10">
+                <CreditCard className="h-16 w-16 text-indigo-400 mb-4 opacity-60"/>
+                <p className="text-white font-semibold text-lg">Select a document</p>
+                <p className="text-indigo-300 text-sm mt-1">Click any card to view full details</p>
+                <motion.button whileHover={{ scale:1.05 }} onClick={openAdd}
+                  className="mt-6 flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white px-5 py-2 rounded-xl text-sm font-semibold transition">
+                  <Plus className="h-4 w-4"/> Add First Document
+                </motion.button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
     </div>
   );
-};
-
-export default TravelWallet;
+}

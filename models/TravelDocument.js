@@ -31,14 +31,33 @@ const TravelDocument = {
       type: data.type,
       number: data.number,
       expiryDate: data.expiryDate,
+      // Core optional fields
+      issueDate: data.issueDate || null,
       country: data.country || null,
-      embassy: data.embassy || null,
+      nationality: data.nationality || null,
       issuer: data.issuer || null,
+      notes: data.notes || null,
+      // Visa
+      visaType: data.visaType || null,
+      entries: data.entries || null,
+      embassy: data.embassy || null,
+      // Credit card
+      bankName: data.bankName || null,
+      cardType: data.cardType || null,
+      // Vaccination
       vaccineType: data.vaccineType || null,
+      manufacturer: data.manufacturer || null,
+      lotNumber: data.lotNumber || null,
       doseDates: data.doseDates || [],
+      // Driving
+      licenseClass: data.licenseClass || null,
+      // Insurance
       insuranceProvider: data.insuranceProvider || null,
       policyNumber: data.policyNumber || null,
+      coverageAmount: data.coverageAmount || null,
+      emergencyPhone: data.emergencyPhone || null,
       coverageDetails: data.coverageDetails || null,
+      // NOTE: photoUrl is intentionally excluded — stored in browser localStorage
       createdAt: now,
       updatedAt: now,
     };
@@ -66,9 +85,13 @@ const TravelDocument = {
     names['#updatedAt'] = 'updatedAt';
 
     const updatableFields = [
-      'type', 'number', 'expiryDate', 'country', 'embassy',
-      'issuer', 'vaccineType', 'doseDates', 'insuranceProvider',
-      'policyNumber', 'coverageDetails',
+      'type', 'number', 'expiryDate', 'issueDate', 'country', 'nationality',
+      'issuer', 'notes', 'visaType', 'entries', 'embassy',
+      'bankName', 'cardType',
+      'vaccineType', 'manufacturer', 'lotNumber', 'doseDates',
+      'licenseClass',
+      'insuranceProvider', 'policyNumber', 'coverageAmount', 'emergencyPhone', 'coverageDetails',
+      // photoUrl intentionally excluded — stored in browser localStorage
     ];
 
     updatableFields.forEach((field) => {

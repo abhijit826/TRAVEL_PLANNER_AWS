@@ -26,8 +26,12 @@ function App() {
         <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route path="/mytrips" element={<ProtectedRoute><MyTrips /></ProtectedRoute>} />
         <Route path="/auth" element={<AuthPage />} />
+        <Route path="/login" element={<AuthPage />} />
         <Route path="/logout" element={<Logout />} />
         <Route path="/edit-profile" element={<EditProfile />} />
+        {/* Route aliases for both URL formats */}
+        <Route path="/my-trips" element={<ProtectedRoute><MyTrips /></ProtectedRoute>} />
+        <Route path="/travel-wallet" element={<ProtectedRoute><WalletPage /></ProtectedRoute>} />
       </Routes>
     </Router>
   );
