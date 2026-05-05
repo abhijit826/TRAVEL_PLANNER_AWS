@@ -3,9 +3,9 @@ const axios = require('axios');
 
 const bedrock = new BedrockRuntimeClient({ region: process.env.AWS_REGION || 'ap-south-1' });
 
-// Default: Amazon Titan Text Premier (current, not EOL)
-// Override via Lambda env var BEDROCK_MODEL_ID
-const MODEL_ID = process.env.BEDROCK_MODEL_ID || 'amazon.titan-text-premier-v1:0';
+// Amazon Nova Pro — available natively in ap-south-1, no marketplace/payment needed!
+// Options: amazon.nova-micro-v1:0 | amazon.nova-lite-v1:0 | amazon.nova-pro-v1:0
+const MODEL_ID = process.env.BEDROCK_MODEL_ID || 'amazon.nova-pro-v1:0';
 
 const WEATHER_API_URL = 'https://api.openweathermap.org/data/2.5/forecast';
 
@@ -57,37 +57,36 @@ const estimateCrowdLevel = (date, duration) => {
   };
 };
 
-// ── Smart Bedrock Invoker — auto-detects model format ────────────────────────
+// ── Smart Bedrock Invoker — auto-detects format by model prefix ───────────────
 const invokeModel = async (modelId, prompt) => {
   let body;
 
   if (modelId.startsWith('anthropic.')) {
-    // Claude format
     body = JSON.stringify({
       anthropic_version: 'bedrock-2023-05-31',
       max_tokens: 4096,
       temperature: 0.7,
       messages: [{ role: 'user', content: prompt }],
     });
-  } else if (modelId.startsWith('amazon.titan')) {
-    // Titan format (Premier, Lite, etc.)
+  } else if (modelId.includes('nova')) {
+    // Amazon Nova (direct: amazon.nova-pro-v1:0 OR inference profile: ap.amazon.nova-pro-v1:0)
     body = JSON.stringify({
-      inputText: prompt,
-      textGenerationConfig: {
-        maxTokenCount: 4096,
+      messages: [{ role: 'user', content: [{ text: prompt }] }],
+      inferenceConfig: {
+        max_new_tokens: 4096,
         temperature: 0.7,
-        topP: 0.9,
+        top_p: 0.9,
       },
     });
-  } else if (modelId.startsWith('meta.llama')) {
-    // Llama format
+  } else if (modelId.includes('titan')) {
     body = JSON.stringify({
-      prompt,
-      max_gen_len: 2048,
-      temperature: 0.7,
+      inputText: prompt,
+      textGenerationConfig: { maxTokenCount: 4096, temperature: 0.7, topP: 0.9 },
     });
+  } else if (modelId.includes('llama')) {
+    body = JSON.stringify({ prompt, max_gen_len: 2048, temperature: 0.7 });
   } else {
-    throw new Error(`Unsupported model prefix: ${modelId}`);
+    throw new Error(`Unsupported model: ${modelId}`);
   }
 
   const command = new InvokeModelCommand({
@@ -100,17 +99,11 @@ const invokeModel = async (modelId, prompt) => {
   const response = await bedrock.send(command);
   const decoded = JSON.parse(Buffer.from(response.body).toString('utf-8'));
 
-  // Extract text based on model type
-  if (modelId.startsWith('anthropic.')) {
-    return decoded.content[0].text;
-  } else if (modelId.startsWith('amazon.titan')) {
-    return decoded.results[0].outputText;
-  } else if (modelId.startsWith('meta.llama')) {
-    return decoded.generation;
-  }
+  if (modelId.startsWith('anthropic.'))   return decoded.content[0].text;
+  if (modelId.includes('nova'))            return decoded.output.message.content[0].text;
+  if (modelId.includes('titan'))           return decoded.results[0].outputText;
+  if (modelId.includes('llama'))           return decoded.generation;
 };
-
-
 
 // ── Lambda Handler ────────────────────────────────────────────────────────────
 exports.handler = async (event) => {
@@ -120,7 +113,6 @@ exports.handler = async (event) => {
     'Content-Type': 'application/json',
   };
 
-  // Handle CORS preflight
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 200, headers, body: '' };
   }
@@ -129,11 +121,7 @@ exports.handler = async (event) => {
   try {
     preferences = typeof event.body === 'string' ? JSON.parse(event.body) : event.body;
   } catch {
-    return {
-      statusCode: 400,
-      headers,
-      body: JSON.stringify({ message: 'Invalid JSON body' }),
-    };
+    return { statusCode: 400, headers, body: JSON.stringify({ message: 'Invalid JSON body' }) };
   }
 
   const { origin, destination, maxPrice, departureDate, duration } = preferences;
@@ -141,7 +129,7 @@ exports.handler = async (event) => {
     return {
       statusCode: 400,
       headers,
-      body: JSON.stringify({ message: 'Missing required fields: origin, destination, maxPrice, departureDate, duration' }),
+      body: JSON.stringify({ message: 'Missing required fields' }),
     };
   }
 
@@ -211,15 +199,13 @@ Return ONLY this JSON structure (no markdown fences, no extra text):
 
     let itinerary;
     try {
-      // Strip any accidental markdown fences from the model response
       const clean = rawText.replace(/```json\n?|\n?```/g, '').trim();
       itinerary = JSON.parse(clean);
     } catch {
-      console.warn('Could not parse JSON from model response — returning raw text');
+      console.warn('Could not parse JSON — returning raw text');
       itinerary = { rawText };
     }
 
-    // Backfill weather data if model didn't include it
     if (itinerary.dailyPlans) {
       itinerary.dailyPlans.forEach((day, i) => {
         if (!day.weather && weatherData[i]) day.weather = weatherData[i];
