@@ -28,6 +28,12 @@ dist-ssr
 .env.*
 !.env.example
 
-# AWS CLI installer (large binary, not needed in repo)
+# AWS CLI installer
 awscliv2.zip
 aws/
+
+# Lambda build artifacts
+lambda-itinerary.zip
+response.json
+test-payload.json
+lambda/generateItinerary/node_modules/
