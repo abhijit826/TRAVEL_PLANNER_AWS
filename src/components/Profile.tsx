@@ -96,23 +96,25 @@ const Profile: React.FC = () => {
             </motion.button>
           </div>
 
-          {/* Avatar + info */}
-          <div className="px-8 pb-8">
-            <div className="flex items-end gap-5 -mt-12 mb-5">
+          {/* Avatar row — overlaps banner */}
+          <div className="px-8 pt-0">
+            <div className="flex items-end justify-between -mt-12">
               <motion.div
                 initial={{ scale: 0 }} animate={{ scale: 1 }}
                 transition={{ type: 'spring', stiffness: 200, delay: 0.2 }}
-                className="w-24 h-24 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-3xl font-extrabold shadow-xl border-4 border-slate-900"
+                className="w-24 h-24 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-3xl font-extrabold shadow-xl border-4 border-slate-900 flex-shrink-0"
               >
                 {initials}
               </motion.div>
-              <div className="pb-1">
-                <h1 className="text-2xl font-extrabold text-white">{user.name}</h1>
-                <div className="flex items-center gap-2 text-indigo-300 text-sm mt-1">
-                  <Mail className="h-3.5 w-3.5" />
-                  <span>{user.email}</span>
-                </div>
-              </div>
+            </div>
+          </div>
+
+          {/* Name + info — fully below banner, never clipped */}
+          <div className="px-8 pb-8 pt-4">
+            <h1 className="text-2xl font-extrabold text-white mb-1">{user.name}</h1>
+            <div className="flex items-center gap-2 text-indigo-300 text-sm mb-5">
+              <Mail className="h-3.5 w-3.5 flex-shrink-0" />
+              <span className="truncate">{user.email}</span>
             </div>
 
             {/* Member since + badge */}
@@ -127,6 +129,7 @@ const Profile: React.FC = () => {
               </span>
             </div>
           </div>
+
         </motion.div>
 
         {/* ── Stats Row ────────────────────────────────────────────────────── */}

@@ -16,7 +16,7 @@ import {
   Tag,
   Users as UsersIcon,
 } from 'lucide-react';
-import { GoogleMap, LoadScript, DirectionsService, DirectionsRenderer, TrafficLayer } from '@react-google-maps/api';
+import { GoogleMap, DirectionsService, DirectionsRenderer, TrafficLayer } from '@react-google-maps/api';
 import api from '../utils/api';
 
 const TripDetails: React.FC = () => {
@@ -42,12 +42,10 @@ const TripDetails: React.FC = () => {
 
   const itinerary = itineraryData?.itinerary || { dailyPlans: [], rawText: 'No itinerary available' };
 
-
   useEffect(() => {
     const fetchUserProfile = async () => {
       setIsUserIdLoading(true);
       try {
-
         const token = localStorage.getItem('token');
         if (!token) throw new Error('No token found');
         const response = await api.get('/api/profile');
@@ -59,7 +57,6 @@ const TripDetails: React.FC = () => {
       } finally {
         setIsUserIdLoading(false);
       }
-
     };
 
     fetchUserProfile();
@@ -92,11 +89,33 @@ const TripDetails: React.FC = () => {
   };
 
   const mapContainerStyle = {
-    height: '20rem',
+    height: '24rem',
     width: '100%',
+    borderRadius: '1rem',
   };
 
   const center = { lat: 34.0522, lng: -118.2437 }; // Default to LAX
+
+  const darkMapStyle = [
+    { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
+    { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
+    { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
+    { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+    { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+    { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#263c3f" }] },
+    { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#6b9a76" }] },
+    { featureType: "road", elementType: "geometry", stylers: [{ color: "#38414e" }] },
+    { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#212a37" }] },
+    { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#9ca5b3" }] },
+    { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#746855" }] },
+    { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#1f2835" }] },
+    { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#f3d19c" }] },
+    { featureType: "transit", elementType: "geometry", stylers: [{ color: "#2f3948" }] },
+    { featureType: "transit.station", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+    { featureType: "water", elementType: "geometry", stylers: [{ color: "#17263c" }] },
+    { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#515c6d" }] },
+    { featureType: "water", elementType: "labels.text.stroke", stylers: [{ color: "#17263c" }] }
+  ];
 
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || 'YOUR_FALLBACK_API_KEY';
   if (!apiKey || apiKey === 'YOUR_FALLBACK_API_KEY') {
@@ -158,86 +177,55 @@ const TripDetails: React.FC = () => {
     } catch (err: unknown) {
       const e = err as { response?: { data: unknown }; message?: string };
       console.error('Error saving trip:', e.response ? e.response.data : e.message);
-      alert('Failed to save trip: ' + (e.response ? JSON.stringify(e.response.data) : e.message));
+      alert('Failed to save trip. Check console for details.');
     }
   };
 
   const handleBookNow = () => {
-    if (isUserIdLoading || !userId) {
-      alert('Please wait for user data to load before booking.');
-      return;
-    }
-    const bookingUrl = getBookingUrl();
-    console.log('Redirecting to:', bookingUrl);
-    window.open(bookingUrl, '_blank');
     saveTrip();
+    const bookingUrl = getBookingUrl();
+    window.open(bookingUrl, '_blank');
   };
 
-  // ── Download itinerary as formatted HTML file ─────────────────────────────
   const downloadItinerary = () => {
-    const days = itinerary.dailyPlans
-      .map((day: { day: number; date: string; weather?: { temperature?: number; condition?: string; rainProbability?: number }; activities: { time?: string; description?: string; location: string; cost?: number }[] }) => `
-        <h3 style="color:#4f46e5;border-bottom:1px solid #e5e7eb;padding-bottom:8px">Day ${day.day} — ${new Date(day.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</h3>
-        ${day.weather ? `<p style="color:#6b7280;font-size:14px">🌡 ${day.weather.temperature}°F &nbsp;|&nbsp; ${day.weather.condition} &nbsp;|&nbsp; 🌧 ${day.weather.rainProbability}% rain</p>` : ''}
-        <table style="width:100%;border-collapse:collapse;margin-top:8px">
-          <thead><tr style="background:#f3f4f6">
-            <th style="padding:8px;text-align:left">Time</th>
-            <th style="padding:8px;text-align:left">Activity</th>
-            <th style="padding:8px;text-align:left">Location</th>
-            <th style="padding:8px;text-align:right">Cost</th>
-          </tr></thead>
-          <tbody>${day.activities.map((a: { time?: string; description?: string; location: string; cost?: number }, i: number) => `
-            <tr style="background:${i % 2 === 0 ? '#fff' : '#f9fafb'}">
-              <td style="padding:8px;color:#6b7280">${a.time || '—'}</td>
-              <td style="padding:8px;font-weight:500">${a.description || '—'}</td>
-              <td style="padding:8px;color:#4f46e5">${a.location}</td>
-              <td style="padding:8px;text-align:right">$${a.cost ?? 0}</td>
-            </tr>`).join('')}
-          </tbody>
-        </table>`).join('');
+    let content = `Trip to ${itinerary.destination}\n`;
+    content += `Dates: ${itinerary.startDate} (${itinerary.durationDays} days)\n`;
+    content += `Total Estimated Cost: $${itinerary.totalCost}\n\n`;
+    itinerary.dailyPlans.forEach((day: { day: number; date: string; activities: { time?: string; description?: string; location: string; cost?: number }[] }) => {
+      content += `--- Day ${day.day}: ${day.date} ---\n`;
+      day.activities.forEach((activity) => {
+        content += `${activity.time || 'N/A'}: ${activity.description} at ${activity.location} ($${activity.cost})\n`;
+      });
+      content += '\n';
+    });
 
-    const html = `<!DOCTYPE html>
-<html><head><meta charset="utf-8">
-<title>Itinerary — ${itinerary.destination}</title>
-<style>body{font-family:Arial,sans-serif;max-width:900px;margin:40px auto;padding:0 20px;color:#111}</style>
-</head><body>
-<h1 style="color:#4f46e5">✈️ ${itinerary.destination} Travel Itinerary</h1>
-<p><strong>Duration:</strong> ${itinerary.durationDays} days &nbsp;|&nbsp; <strong>Start:</strong> ${itinerary.startDate} &nbsp;|&nbsp; <strong>Total Cost:</strong> $${itinerary.totalCost}</p>
-<hr style="border-color:#e5e7eb">
-${days}
-<p style="margin-top:32px;color:#9ca3af;font-size:12px">Generated by Travel Planner AI · Powered by Amazon Nova Pro</p>
-</body></html>`;
-
-    const blob = new Blob([html], { type: 'text/html' });
+    const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${itinerary.destination}-itinerary.html`;
-    document.body.appendChild(a);
+    a.download = `${itinerary.destination.replace(/\s+/g, '_')}_Itinerary.txt`;
     a.click();
-    document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
 
-  // ── Share itinerary (Web Share API → clipboard fallback) ──────────────────
-  const shareItinerary = async () => {
-    const appUrl = import.meta.env.VITE_APP_URL || 'https://d3se73vbq7jmlm.cloudfront.net';
-    const text = `✈️ My trip to ${itinerary.destination}!\n📅 ${itinerary.durationDays} days starting ${itinerary.startDate}\n💰 Estimated cost: $${itinerary.totalCost}\n\n🌍 Plan your own trip:\n${appUrl}\n\nGenerated by Travel Planner AI · Powered by Amazon Nova Pro`;
+  const shareItinerary = () => {
+    const shareText = `✈️ My trip to ${itinerary.destination}!
+📅 ${itinerary.durationDays} days starting ${itinerary.startDate}
+💰 Estimated cost: $${itinerary.totalCost}
+
+Generated by Travel Planner AI`;
+
     if (navigator.share) {
-      try {
-        await navigator.share({
-          title: `${itinerary.destination} Trip Itinerary`,
-          text,
-          url: appUrl,
-        });
-      } catch { /* user cancelled */ }
+      navigator.share({ title: `Trip to ${itinerary.destination}`, text: shareText }).catch(console.error);
     } else {
-      await navigator.clipboard.writeText(text);
-      setShareSuccess(true);
-      setTimeout(() => setShareSuccess(false), 3000);
+      navigator.clipboard.writeText(shareText)
+        .then(() => {
+          setShareSuccess(true);
+          setTimeout(() => setShareSuccess(false), 2000);
+        })
+        .catch(console.error);
     }
   };
-
 
   const drawRoute = useCallback((response: google.maps.DirectionsResult | null, status: google.maps.DirectionsStatus) => {
     console.log('Directions Response:', response, 'Status:', status);
@@ -268,257 +256,281 @@ ${days}
         console.warn('No valid route or legs in response:', response);
       }
     } else if (status === 'ZERO_RESULTS') {
-      setMapError('No route found between the selected locations.');
+      console.warn('No route found between the selected locations. (They might be too far apart or not specific enough for routing).');
     } else {
       console.error('Directions request failed with status:', status);
-      setMapError(`Failed to load route: ${status}. Locations: ${itinerary.dailyPlans[activeDay - 1].activities.map((a: { location: string }) => a.location).join(', ')}`);
     }
   }, [directionsRenderer, activeDay, itinerary.dailyPlans]);
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-12">
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        className="bg-white rounded-xl shadow-lg overflow-hidden"
-      >
-        {/* Header Section */}
-        <div className="relative h-64 sm:h-80 bg-gradient-to-r from-indigo-600 to-purple-700">
-          <img
-            src="https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&w=1974&q=80"
-            alt={itinerary.destination}
-            className="w-full h-full object-cover opacity-40"
-          />
-          <div className="absolute inset-0 flex items-end p-6">
-            <motion.div variants={itemVariants}>
-              <h1 className="text-4xl font-extrabold text-white drop-shadow-md">{itinerary.destination}</h1>
-              <div className="flex flex-wrap gap-4 mt-3 text-white">
-                <span className="flex items-center"><Calendar className="h-5 w-5 mr-2" />{itinerary.startDate} ({itinerary.durationDays} days)</span>
-                <span className="flex items-center"><DollarSign className="h-5 w-5 mr-2" />${itinerary.totalCost}</span>
-                <span className="flex items-center"><Users className="h-5 w-5 mr-2" />{preferences?.companions || 'N/A'}</span>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-950 to-purple-950 px-4 py-12">
+      {/* Background orbs */}
+      <div className="absolute top-20 left-10 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-20 right-10 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
+
+      <div className="max-w-6xl mx-auto relative z-10">
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+          className="bg-white/10 backdrop-blur-xl rounded-3xl shadow-2xl overflow-hidden border border-white/20"
+        >
+          {/* Header Section */}
+          <div className="relative h-72 sm:h-96">
+            <img
+              src="https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&w=1974&q=80"
+              alt={itinerary.destination}
+              className="w-full h-full object-cover opacity-60"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent" />
+            <div className="absolute inset-0 flex items-end p-8">
+              <motion.div variants={itemVariants} className="w-full">
+                <h1 className="text-5xl font-extrabold text-white mb-4 drop-shadow-xl">{itinerary.destination}</h1>
+                <div className="flex flex-wrap gap-4 mt-3 text-indigo-100">
+                  <span className="flex items-center bg-white/10 backdrop-blur px-4 py-2 rounded-full border border-white/20">
+                    <Calendar className="h-5 w-5 mr-2 text-indigo-300" />
+                    {itinerary.startDate} ({itinerary.durationDays} days)
+                  </span>
+                  <span className="flex items-center bg-white/10 backdrop-blur px-4 py-2 rounded-full border border-white/20">
+                    <DollarSign className="h-5 w-5 mr-2 text-indigo-300" />
+                    ${itinerary.totalCost}
+                  </span>
+                  <span className="flex items-center bg-white/10 backdrop-blur px-4 py-2 rounded-full border border-white/20">
+                    <Users className="h-5 w-5 mr-2 text-indigo-300" />
+                    {preferences?.companions || 'N/A'}
+                  </span>
+                </div>
+              </motion.div>
+            </div>
+          </div>
+
+          {/* Main Content */}
+          <div className="p-8">
+            <motion.div variants={itemVariants} className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+              <h2 className="text-3xl font-bold text-white">Your Travel Itinerary</h2>
+              <div className="flex flex-wrap gap-3">
+                <motion.button
+                  variants={itemVariants}
+                  whileHover={{ scale: 1.05 }}
+                  onClick={() => setShowMap(!showMap)}
+                  className="flex items-center px-5 py-2.5 bg-white/10 text-white rounded-xl border border-white/20 hover:bg-white/20 transition-all font-medium"
+                >
+                  <Map className="h-5 w-5 mr-2 text-indigo-300" />
+                  <span>{showMap ? 'Hide Map' : 'Show Map'}</span>
+                </motion.button>
+                <motion.button
+                  variants={itemVariants}
+                  whileHover={{ scale: 1.05 }}
+                  onClick={downloadItinerary}
+                  className="flex items-center px-5 py-2.5 bg-white/10 text-white rounded-xl border border-white/20 hover:bg-white/20 transition-all font-medium"
+                >
+                  <Download className="h-5 w-5 mr-2 text-indigo-300" />
+                  <span>Download</span>
+                </motion.button>
+                <motion.button
+                  variants={itemVariants}
+                  whileHover={{ scale: 1.05 }}
+                  onClick={shareItinerary}
+                  className={`flex items-center px-5 py-2.5 rounded-xl border transition-all font-medium ${
+                    shareSuccess
+                      ? 'bg-green-500/20 text-green-300 border-green-500/30'
+                      : 'bg-white/10 text-white border-white/20 hover:bg-white/20'
+                  }`}
+                >
+                  <Share2 className="h-5 w-5 mr-2 text-indigo-300" />
+                  <span>{shareSuccess ? 'Copied! ✓' : 'Share'}</span>
+                </motion.button>
+              </div>
+            </motion.div>
+
+            {showMap && (
+              <div className="mb-8 rounded-2xl overflow-hidden border border-white/20 shadow-2xl relative">
+                <GoogleMap
+                  mapContainerStyle={mapContainerStyle}
+                  center={center}
+                  zoom={10}
+                  options={{ styles: darkMapStyle }}
+                  onLoad={(mapInstance) => console.log('Map Loaded:', mapInstance)}
+                  onUnmount={() => setMapError(null)}
+                >
+                  <TrafficLayer />
+                  {itinerary.dailyPlans[activeDay - 1]?.activities.length > 1 && (
+                    <DirectionsService
+                      options={{
+                        origin: normalizeLocation(itinerary.dailyPlans[activeDay - 1].activities[0].location),
+                        destination: normalizeLocation(itinerary.dailyPlans[activeDay - 1].activities[itinerary.dailyPlans[activeDay - 1].activities.length - 1].location),
+                        waypoints: itinerary.dailyPlans[activeDay - 1].activities
+                          .slice(1, -1)
+                          .filter((item: { location: string }, index: number, self: { location: string }[]) =>
+                            index === self.findIndex((t: { location: string }) => t.location === item.location)
+                          )
+                          .map((activity: { location: string }) => ({ location: normalizeLocation(activity.location), stopover: true })),
+                        optimizeWaypoints: true,
+                        travelMode: google.maps.TravelMode.WALKING,
+                      }}
+                      callback={drawRoute}
+                    />
+                  )}
+                  <DirectionsRenderer
+                    options={{ suppressMarkers: true }}
+                    onLoad={(renderer) => {
+                      setDirectionsRenderer(renderer);
+                      console.log('Directions Renderer Loaded:', renderer);
+                    }}
+                  />
+                </GoogleMap>
+              </div>
+            )}
+
+            {/* Day Tabs */}
+            <motion.div variants={itemVariants} className="flex mb-8 overflow-x-auto pb-2 space-x-3 scrollbar-hide">
+              {itinerary.dailyPlans.map((day: { day: number; date: string; weather?: { temperature?: number; condition?: string; rainProbability?: number }; activities: { time?: string; description?: string; location: string; cost?: number }[] }) => (
+                <motion.button
+                  key={day.day}
+                  variants={itemVariants}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setActiveDay(day.day)}
+                  className={`flex-shrink-0 px-6 py-3 rounded-xl font-bold transition-all duration-300 ${
+                    activeDay === day.day
+                      ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-500/30 border-transparent'
+                      : 'bg-white/5 text-white/60 hover:text-white hover:bg-white/10 border border-white/10'
+                  }`}
+                >
+                  Day {day.day}
+                </motion.button>
+              ))}
+            </motion.div>
+
+            {/* Daily Plan Details */}
+            <motion.div variants={containerVariants} className="bg-slate-900/50 rounded-3xl p-8 border border-white/10 backdrop-blur-md">
+              {itinerary.dailyPlans
+                .filter((day: { day: number }) => day.day === activeDay)
+                .map((day: { day: number; date: string; weather?: { temperature?: number; condition?: string; rainProbability?: number }; activities: { time?: string; description?: string; location: string; cost?: number }[] }) => (
+                  <motion.div key={day.day} variants={itemVariants}>
+                    <h3 className="text-3xl font-bold text-white mb-6 flex items-center">
+                      <Calendar className="h-8 w-8 mr-3 text-indigo-400" />
+                      Day {day.day} <span className="text-indigo-300/60 font-normal ml-3">| {new Date(day.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</span>
+                    </h3>
+
+                    {/* Crowd and Weather Info */}
+                    <motion.div
+                      variants={itemVariants}
+                      className="mb-8 p-6 bg-white/5 rounded-2xl grid grid-cols-1 md:grid-cols-2 gap-6 border border-white/10"
+                    >
+                      {/* Crowd Level */}
+                      <div className="flex items-center space-x-5">
+                        <div className="p-3 bg-indigo-500/20 rounded-xl">
+                          <UsersIcon className="h-7 w-7 text-indigo-400" />
+                        </div>
+                        <div>
+                          <p className="text-indigo-200/60 text-sm font-medium uppercase tracking-wider">Crowd Level</p>
+                          <p className={`text-xl font-bold mt-1 ${
+                            itinerary.crowdLevel === 'high' ? 'text-pink-400' : 'text-emerald-400'
+                          }`}>
+                            {itinerary.crowdLevel || 'N/A'}
+                          </p>
+                          <p className="text-sm text-indigo-200/80 mt-1">
+                            {itinerary.crowdLevel === 'high' ? 'Consider early visits to avoid crowds.' : 'Enjoy a relaxed trip!'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Weather Info */}
+                      <div className="flex items-center space-x-5">
+                        <div className="p-3 bg-indigo-500/20 rounded-xl">
+                          <WeatherIcon condition={day.weather?.condition || 'Unknown'} />
+                        </div>
+                        <div>
+                          <p className="text-indigo-200/60 text-sm font-medium uppercase tracking-wider mb-2">Weather</p>
+                          <div className="flex gap-4">
+                            <p className="text-white font-medium flex items-center bg-white/5 px-2 py-1 rounded">
+                              <Sun className="h-4 w-4 mr-1.5 text-yellow-500" />
+                              {day.weather?.temperature || 'N/A'}°F
+                            </p>
+                            <p className="text-white font-medium flex items-center bg-white/5 px-2 py-1 rounded">
+                              <CloudRain className="h-4 w-4 mr-1.5 text-blue-400" />
+                              {day.weather?.rainProbability || 'N/A'}%
+                            </p>
+                          </div>
+                          <p className="text-sm text-indigo-200/80 mt-2">
+                            Expect <span className="text-white font-semibold">{day.weather?.condition || 'N/A'}</span> conditions.
+                          </p>
+                        </div>
+                      </div>
+                    </motion.div>
+
+                    {/* Activities */}
+                    <motion.div variants={containerVariants} className="space-y-4">
+                      <h4 className="text-2xl font-bold text-white mb-6 flex items-center">
+                        <Tag className="h-6 w-6 mr-3 text-pink-400" />
+                        Daily Activities
+                      </h4>
+                      {day.activities.length === 0 ? (
+                        <p className="text-indigo-200/60 italic text-center py-8 bg-white/5 rounded-2xl border border-white/10">No activities planned for this day.</p>
+                      ) : (
+                        day.activities.map((activity: { time?: string; description?: string; location: string; cost?: number }, index: number) => (
+                          <motion.div
+                            key={index}
+                            variants={itemVariants}
+                            whileHover={{ scale: 1.01 }}
+                            className="bg-white/5 p-5 rounded-2xl border border-white/10 hover:border-indigo-500/50 hover:bg-white/10 transition-all duration-300"
+                          >
+                            <div className="flex items-start">
+                              <div className="flex-shrink-0 text-indigo-300 font-bold bg-indigo-500/20 px-4 py-2.5 rounded-xl border border-indigo-500/20">
+                                {activity.time || 'N/A'}
+                              </div>
+                              <div className="flex-grow ml-5">
+                                <h5 className="text-xl font-bold text-white mb-2">{activity.description || 'No description'}</h5>
+                                <div className="flex flex-col sm:flex-row gap-3 sm:gap-6 mt-1">
+                                  <div className="flex items-center text-indigo-200">
+                                    <MapPin className="h-4 w-4 mr-2 text-pink-400" />
+                                    <span>{activity.location || 'N/A'}</span>
+                                  </div>
+                                  <div className="flex items-center text-indigo-200">
+                                    <DollarSign className="h-4 w-4 mr-1 text-emerald-400" />
+                                    <span className="font-medium">{activity.cost || 0}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </motion.div>
+                        ))
+                      )}
+                    </motion.div>
+                  </motion.div>
+                ))}
+            </motion.div>
+
+            {/* Footer Section */}
+            <motion.div variants={itemVariants} className="mt-8 flex flex-col md:flex-row justify-between items-center p-8 bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl gap-6">
+              <div>
+                <p className="text-indigo-200/60 text-sm font-medium uppercase tracking-wider">Total Estimated Cost</p>
+                <p className="text-4xl font-extrabold text-white mt-1 drop-shadow-md flex items-center">
+                  <span className="text-emerald-400 mr-1">$</span>{itinerary.totalCost || 0}
+                </p>
+              </div>
+              <div className="flex flex-wrap space-x-4">
+                <Link
+                  to="/create-trip"
+                  className="px-8 py-4 rounded-xl border border-indigo-500/50 text-indigo-300 hover:bg-indigo-500/10 transition-all font-bold text-center"
+                >
+                  Modify Trip
+                </Link>
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={handleBookNow}
+                  className="px-8 py-4 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold shadow-lg shadow-indigo-500/30 hover:from-indigo-600 hover:to-purple-700 transition-all"
+                  disabled={isUserIdLoading || !userId}
+                >
+                  {isUserIdLoading ? 'Loading...' : 'Save & Book Now'}
+                </motion.button>
               </div>
             </motion.div>
           </div>
-        </div>
-
-        {/* Main Content */}
-        <div className="p-6">
-          <motion.div variants={itemVariants} className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">Your Travel Itinerary</h2>
-            <div className="flex space-x-3">
-              <motion.button
-                variants={itemVariants}
-                whileHover={{ scale: 1.05 }}
-                onClick={() => setShowMap(!showMap)}
-                className="flex items-center px-4 py-3 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-all"
-              >
-                <Map className="h-5 w-5 mr-2" />
-                <span>{showMap ? 'Hide Map' : 'Show Map'}</span>
-              </motion.button>
-              <motion.button
-                variants={itemVariants}
-                whileHover={{ scale: 1.05 }}
-                onClick={downloadItinerary}
-                className="flex items-center px-4 py-3 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-all"
-              >
-                <Download className="h-5 w-5 mr-2" />
-                <span>Download</span>
-              </motion.button>
-              <motion.button
-                variants={itemVariants}
-                whileHover={{ scale: 1.05 }}
-                onClick={shareItinerary}
-                className={`flex items-center px-4 py-3 rounded-lg transition-all ${
-                  shareSuccess
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
-                }`}
-              >
-                <Share2 className="h-5 w-5 mr-2" />
-                <span>{shareSuccess ? 'Copied! ✓' : 'Share'}</span>
-              </motion.button>
-            </div>
-          </motion.div>
-
-          {showMap && (
-            <LoadScript
-              googleMapsApiKey={apiKey}
-              libraries={['places']}
-              onLoad={() => console.log('Google Maps Loaded')}
-            >
-              <GoogleMap
-                mapContainerStyle={mapContainerStyle}
-                center={center}
-                zoom={10}
-                onLoad={(mapInstance) => console.log('Map Loaded:', mapInstance)}
-                onUnmount={() => setMapError(null)}
-              >
-                <TrafficLayer />
-                {itinerary.dailyPlans[activeDay - 1]?.activities.length > 1 && (
-                  <DirectionsService
-                    options={{
-                      origin: normalizeLocation(itinerary.dailyPlans[activeDay - 1].activities[0].location),
-                      destination: normalizeLocation(itinerary.dailyPlans[activeDay - 1].activities[itinerary.dailyPlans[activeDay - 1].activities.length - 1].location),
-                      waypoints: itinerary.dailyPlans[activeDay - 1].activities
-                        .slice(1, -1)
-                        .filter((item: { location: string }, index: number, self: { location: string }[]) =>
-                          index === self.findIndex((t: { location: string }) => t.location === item.location)
-                        )
-                        .map((activity: { location: string }) => ({ location: normalizeLocation(activity.location), stopover: true })),
-                      optimizeWaypoints: true,
-                      travelMode: google.maps.TravelMode.WALKING,
-                    }}
-                    callback={drawRoute}
-                  />
-                )}
-                <DirectionsRenderer
-                  options={{ suppressMarkers: true }}
-                  onLoad={(renderer) => {
-                    setDirectionsRenderer(renderer);
-                    console.log('Directions Renderer Loaded:', renderer);
-                  }}
-                />
-              </GoogleMap>
-              {mapError && <p className="text-red-600 text-center mt-2">{mapError}</p>}
-            </LoadScript>
-          )}
-
-          {/* Day Tabs */}
-          <motion.div variants={itemVariants} className="flex mb-6 overflow-x-auto pb-2 space-x-2">
-            {itinerary.dailyPlans.map((day: { day: number; date: string; weather?: { temperature?: number; condition?: string; rainProbability?: number }; activities: { time?: string; description?: string; location: string; cost?: number }[] }) => (
-              <motion.button
-                key={day.day}
-                variants={itemVariants}
-                whileHover={{ scale: 1.1 }}
-                onClick={() => setActiveDay(day.day)}
-                className={`flex-shrink-0 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
-                  activeDay === day.day
-                    ? 'bg-indigo-600 text-white shadow-md'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Day {day.day}
-              </motion.button>
-            ))}
-          </motion.div>
-
-          {/* Daily Plan Details */}
-          <motion.div variants={containerVariants} className="bg-gray-50 rounded-xl p-6">
-            {itinerary.dailyPlans
-              .filter((day: { day: number }) => day.day === activeDay)
-              .map((day: { day: number; date: string; weather?: { temperature?: number; condition?: string; rainProbability?: number }; activities: { time?: string; description?: string; location: string; cost?: number }[] }) => (
-                <motion.div key={day.day} variants={itemVariants}>
-                  <h3 className="text-2xl font-semibold text-gray-900 mb-4 flex items-center">
-                    <Calendar className="h-6 w-6 mr-2 text-indigo-600" />
-                    Day {day.day} - {new Date(day.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
-                  </h3>
-
-                  {/* Crowd and Weather Info */}
-                  <motion.div
-                    variants={itemVariants}
-                    className="mb-6 p-4 bg-white rounded-lg grid grid-cols-1 md:grid-cols-2 gap-4 border-l-4 border-indigo-500"
-                  >
-                    {/* Crowd Level */}
-                    <div className="flex items-center space-x-4">
-                      <UsersIcon className="h-6 w-6 text-indigo-500" />
-                      <div>
-                        <p className="text-gray-700 font-medium">Crowd Level:</p>
-                        <p className={`text-lg font-bold ${
-                          itinerary.crowdLevel === 'high' ? 'text-red-600' : 'text-green-600'
-                        }`}>
-                          {itinerary.crowdLevel || 'N/A'}
-                        </p>
-                        <p className="text-sm text-gray-600">
-                          {itinerary.crowdLevel === 'high' ? 'Consider early visits to avoid crowds.' : 'Enjoy a relaxed trip!'}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Weather Info */}
-                    <div className="flex items-center space-x-4">
-                      <WeatherIcon condition={day.weather?.condition || 'Unknown'} />
-                      <div>
-                        <p className="text-gray-700 font-medium flex items-center">
-                          <Sun className="h-5 w-5 mr-2 text-yellow-500" />
-                          Temp: {day.weather?.temperature || 'N/A'}°F
-                        </p>
-                        <p className="text-gray-700 font-medium flex items-center">
-                          <CloudRain className="h-5 w-5 mr-2 text-blue-500" />
-                          Rain: {day.weather?.rainProbability || 'N/A'}%
-                        </p>
-                        <p className="text-gray-600">
-                          Condition: <span className="font-medium">{day.weather?.condition || 'N/A'}</span>
-                        </p>
-                      </div>
-                    </div>
-                  </motion.div>
-
-                  {/* Activities */}
-                  <motion.div variants={containerVariants} className="space-y-6">
-                    <h4 className="text-xl font-medium text-gray-800 mb-4 flex items-center">
-                      <Tag className="h-5 w-5 mr-2 text-indigo-500" />
-                      Daily Activities
-                    </h4>
-                    {day.activities.length === 0 ? (
-                      <p className="text-gray-500 italic text-center py-4 bg-white rounded-lg">No activities planned for this day.</p>
-                    ) : (
-                      day.activities.map((activity: { time?: string; description?: string; location: string; cost?: number }, index: number) => (
-                        <motion.div
-                          key={index}
-                          variants={itemVariants}
-                          whileHover={{ scale: 1.02, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                          className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-green-500 transition-all duration-300"
-                        >
-                          <div className="flex items-start">
-                            <div className="flex-shrink-0 w-20 text-gray-600 font-medium bg-green-50 p-2 rounded-md">
-                              {activity.time || 'N/A'}
-                            </div>
-                            <div className="flex-grow ml-4">
-                              <h5 className="text-lg font-semibold text-gray-900">{activity.description || 'No description'}</h5>
-                              <div className="flex items-center text-gray-600 mt-1">
-                                <MapPin className="h-4 w-4 mr-2 text-indigo-500" />
-                                <span>{activity.location || 'N/A'}</span>
-                              </div>
-                              <div className="flex items-center text-gray-600 mt-1">
-                                <DollarSign className="h-4 w-4 mr-2 text-green-500" />
-                                <span>${activity.cost || 0}</span>
-                              </div>
-                            </div>
-                          </div>
-                        </motion.div>
-                      ))
-                    )}
-                  </motion.div>
-                </motion.div>
-              ))}
-          </motion.div>
-
-          {/* Footer Section */}
-          <motion.div variants={itemVariants} className="mt-6 flex justify-between items-center py-4 bg-gray-100 rounded-lg">
-            <div>
-              <p className="text-gray-700 font-medium">Total Estimated Cost:</p>
-              <p className="text-2xl font-bold text-gray-900">${itinerary.totalCost || 0}</p>
-            </div>
-            <div className="flex space-x-4">
-              <Link
-                to="/create-trip"
-                className="px-6 py-3 rounded-lg border border-indigo-600 text-indigo-600 hover:bg-indigo-50 transition-colors font-medium flex items-center"
-              >
-                <span>Modify Trip</span>
-              </Link>
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                onClick={handleBookNow}
-                className="px-6 py-3 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors font-medium flex items-center"
-                disabled={isUserIdLoading || !userId}
-              >
-                <span>Book Now</span>
-              </motion.button>
-            </div>
-          </motion.div>
-        </div>
-      </motion.div>
+        </motion.div>
+      </div>
       {mapError && <p className="text-red-600 text-center mt-2">{mapError}</p>}
     </div>
   );
