@@ -15,6 +15,7 @@
   "license": "ISC",
   "description": "AI Travel Planner — Node.js backend on AWS EC2 + React frontend on S3/CloudFront",
   "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.1051.0",
     "@aws-sdk/client-dynamodb": "^3.1041.0",
     "@aws-sdk/lib-dynamodb": "^3.1041.0",
     "@react-google-maps/api": "^2.20.6",

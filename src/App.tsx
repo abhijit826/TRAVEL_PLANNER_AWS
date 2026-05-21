@@ -6,6 +6,7 @@ import CreateTripPage from './pages/CreateTripPage';
 import TripDetailsPage from './pages/TripDetailsPage';
 import GeoGuidePage from './pages/GeoGuidePage';
 import WalletPage from './pages/WalletPage';
+import ConciergePage from './pages/ConciergePage';
 import Profile from './components/Profile';
 import MyTrips from './components/MyTrips';
 import Navbar from './components/Navbar';
@@ -30,6 +31,7 @@ function App() {
           <Route path="/trip-details" element={<TripDetailsPage />} />
           <Route path="/geo-guide" element={<GeoGuidePage />} />
           <Route path="/wallet" element={<ProtectedRoute><WalletPage /></ProtectedRoute>} />
+          <Route path="/concierge" element={<ProtectedRoute><ConciergePage /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/mytrips" element={<ProtectedRoute><MyTrips /></ProtectedRoute>} />
           <Route path="/auth" element={<AuthPage />} />

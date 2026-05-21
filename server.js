@@ -11,6 +11,7 @@ const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/user');
 const tripRoutes = require('./routes/trip');
 const travelWalletRoutes = require('./routes/travelWallet');
+const conciergeRoutes = require('./routes/concierge');
 const { protect } = require('./middleware/authMiddleware');
 
 // ─── NOTE ─────────────────────────────────────────────────────────────────────
@@ -42,6 +43,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api', userRoutes);
 app.use('/api', protect, tripRoutes);
 app.use('/api/travel-wallet', travelWalletRoutes);
+app.use('/api/concierge', protect, conciergeRoutes);
 
 // ── Global Error Handler ──────────────────────────────────────────────────────
 app.use((err, req, res, next) => {

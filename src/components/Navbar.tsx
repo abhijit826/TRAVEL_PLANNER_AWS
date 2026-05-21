@@ -31,6 +31,15 @@ const Navbar: React.FC = () => {
             <Link to="/wallet" className="px-3 py-2 rounded-md text-sm font-medium text-gray-900 hover:text-indigo-600">
               Travel Wallet
             </Link>
+            {token && (
+              <Link to="/concierge" className="px-3 py-2 rounded-md text-sm font-medium text-gray-900 hover:text-indigo-600 flex items-center gap-1.5">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
+                </span>
+                AI Concierge
+              </Link>
+            )}
             {token ? (
               <div className="relative">
                 <button
@@ -101,6 +110,15 @@ const Navbar: React.FC = () => {
             >
               Travel Wallet
             </Link>
+            {token && (
+              <Link 
+                to="/concierge" 
+                className="block px-3 py-2 rounded-md text-base font-medium text-gray-900 hover:text-indigo-600"
+                onClick={() => setIsOpen(false)}
+              >
+                AI Concierge
+              </Link>
+            )}
             {token ? (
               <>
                 <Link 
