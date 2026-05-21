@@ -3,7 +3,7 @@ const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-be
 const router = express.Router();
 
 const bedrock = new BedrockRuntimeClient({ region: process.env.AWS_REGION || 'ap-south-1' });
-const MODEL_ID = process.env.BEDROCK_MODEL_ID || 'amazon.nova-pro-v1:0';
+const MODEL_ID = process.env.BEDROCK_MODEL_ID || 'apac.amazon.nova-pro-v1:0';
 
 // Helper to format system prompt and build model payload for chat
 const chatWithModel = async (modelId, systemPrompt, chatHistory, userMessage) => {
