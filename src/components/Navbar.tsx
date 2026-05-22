@@ -40,6 +40,11 @@ const Navbar: React.FC = () => {
                 AI Concierge
               </Link>
             )}
+            {token && (
+              <Link to="/budget" className="px-3 py-2 rounded-md text-sm font-medium text-gray-900 hover:text-indigo-600">
+                Budget Optimizer
+              </Link>
+            )}
             {token ? (
               <div className="relative">
                 <button
@@ -117,6 +122,15 @@ const Navbar: React.FC = () => {
                 onClick={() => setIsOpen(false)}
               >
                 AI Concierge
+              </Link>
+            )}
+            {token && (
+              <Link 
+                to="/budget" 
+                className="block px-3 py-2 rounded-md text-base font-medium text-gray-900 hover:text-indigo-600"
+                onClick={() => setIsOpen(false)}
+              >
+                Budget Optimizer
               </Link>
             )}
             {token ? (

@@ -1,4 +1,4 @@
-const { PutCommand, QueryCommand, GetCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+const { PutCommand, QueryCommand, GetCommand, DeleteCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { docClient } = require('../utils/dynamodb');
 const { randomUUID } = require('crypto');
 
@@ -62,6 +62,41 @@ const Trip = {
       Key: { userId, _id: tripId },
       ReturnValues: 'ALL_OLD',
     }));
+    return result.Attributes || null;
+  },
+
+  /**
+   * Update a trip by userId + tripId (_id).
+   */
+  async update(userId, tripId, updates) {
+    const expressions = [];
+    const names = {};
+    const values = { ':updatedAt': new Date().toISOString() };
+    expressions.push('#updatedAt = :updatedAt');
+    names['#updatedAt'] = 'updatedAt';
+
+    const updatableFields = [
+      'destination', 'duration', 'budget', 'companions', 'activities',
+      'baseCurrency', 'expenses', 'predictions'
+    ];
+
+    updatableFields.forEach((field) => {
+      if (updates[field] !== undefined) {
+        expressions.push(`#${field} = :${field}`);
+        names[`#${field}`] = field;
+        values[`:${field}`] = updates[field];
+      }
+    });
+
+    const result = await docClient.send(new UpdateCommand({
+      TableName: TABLE_NAME,
+      Key: { userId, _id: tripId },
+      UpdateExpression: `SET ${expressions.join(', ')}`,
+      ExpressionAttributeNames: names,
+      ExpressionAttributeValues: values,
+      ReturnValues: 'ALL_NEW',
+    }));
+
     return result.Attributes || null;
   },
 };

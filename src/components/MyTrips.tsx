@@ -114,21 +114,29 @@ const MyTrips: React.FC = () => {
                       <MapPin className="h-5 w-5 mr-2" />
                       <span className="text-sm">{trip.destination}</span>
                     </div>
-                    <div className="mt-4 flex gap-2">
-                      <motion.button
-                        className="bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors flex-1"
-                        whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                        onClick={() => setSelectedTrip(trip)}
+                    <div className="mt-4 flex flex-col gap-2">
+                      <div className="flex gap-2">
+                        <motion.button
+                          className="bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors flex-1"
+                          whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                          onClick={() => setSelectedTrip(trip)}
+                        >
+                          View Details
+                        </motion.button>
+                        <motion.button
+                          className="bg-red-600 text-white py-2 px-3 rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center"
+                          whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                          onClick={() => handleDelete(trip._id)}
+                        >
+                          <Trash2 className="h-5 w-5" />
+                        </motion.button>
+                      </div>
+                      <Link
+                        to={`/budget?tripId=${trip._id}`}
+                        className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white py-2.5 px-4 rounded-lg hover:from-indigo-600 hover:to-purple-700 text-center transition-colors font-medium block"
                       >
-                        View Details
-                      </motion.button>
-                      <motion.button
-                        className="bg-red-600 text-white py-2 px-3 rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center"
-                        whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                        onClick={() => handleDelete(trip._id)}
-                      >
-                        <Trash2 className="h-5 w-5" />
-                      </motion.button>
+                        Budget Optimizer
+                      </Link>
                     </div>
                   </motion.div>
                 ))}
@@ -226,21 +234,30 @@ const MyTrips: React.FC = () => {
                   </div>
                 )}
 
-                <div className="flex gap-3 pt-2">
-                  <motion.button
-                    whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                <div className="flex flex-col gap-2 pt-2">
+                  <Link
+                    to={`/budget?tripId=${selectedTrip._id}`}
                     onClick={() => setSelectedTrip(null)}
-                    className="flex-1 py-2 px-4 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                    className="w-full py-2.5 px-4 bg-gradient-to-r from-indigo-600 to-purple-700 text-white text-center rounded-lg hover:from-indigo-700 hover:to-purple-800 transition-colors font-medium flex items-center justify-center gap-2"
                   >
-                    Close
-                  </motion.button>
-                  <motion.button
-                    whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                    onClick={() => handleDelete(selectedTrip._id)}
-                    className="flex-1 py-2 px-4 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
-                  >
-                    <Trash2 className="h-4 w-4" /> Delete Trip
-                  </motion.button>
+                    Optimize Budget
+                  </Link>
+                  <div className="flex gap-3">
+                    <motion.button
+                      whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                      onClick={() => setSelectedTrip(null)}
+                      className="flex-1 py-2 px-4 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                      Close
+                    </motion.button>
+                    <motion.button
+                      whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                      onClick={() => handleDelete(selectedTrip._id)}
+                      className="flex-1 py-2 px-4 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Trash2 className="h-4 w-4" /> Delete Trip
+                    </motion.button>
+                  </div>
                 </div>
               </div>
             </motion.div>
