@@ -61,6 +61,12 @@ const chatWithModel = async (modelId, systemPrompt, chatHistory, userMessage) =>
     }
   }
 
+  console.log(`🤖 [${new Date().toISOString()}] [Bedrock Request - Concierge] Invoking model: ${modelId}`);
+  console.log(`   System Prompt Length: ${systemPrompt ? systemPrompt.length : 0} chars`);
+  console.log(`   History Size: ${chatHistory ? chatHistory.length : 0} messages`);
+  console.log(`   User Message: "${userMessage}"`);
+  console.log(`   Payload:`, body);
+
   const command = new InvokeModelCommand({
     modelId,
     contentType: 'application/json',
@@ -68,13 +74,22 @@ const chatWithModel = async (modelId, systemPrompt, chatHistory, userMessage) =>
     body,
   });
 
+  const startTime = Date.now();
   const response = await bedrock.send(command);
+  const duration = Date.now() - startTime;
   const decoded = JSON.parse(Buffer.from(response.body).toString('utf-8'));
 
-  if (modelId.startsWith('anthropic.'))   return decoded.content[0].text;
-  if (modelId.includes('nova'))            return decoded.output.message.content[0].text;
-  if (modelId.includes('titan'))           return decoded.results[0].outputText;
-  if (modelId.includes('llama'))           return decoded.generation;
+  let reply;
+  if (modelId.startsWith('anthropic.'))   reply = decoded.content[0].text;
+  else if (modelId.includes('nova'))       reply = decoded.output.message.content[0].text;
+  else if (modelId.includes('titan'))      reply = decoded.results[0].outputText;
+  else if (modelId.includes('llama'))      reply = decoded.generation;
+  else                                     reply = '';
+
+  console.log(`✅ [${new Date().toISOString()}] [Bedrock Response - Concierge] Succeeded in ${duration}ms`);
+  console.log(`   Reply:`, reply);
+
+  return reply;
 };
 
 // Route: POST /api/concierge/chat

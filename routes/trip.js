@@ -165,6 +165,11 @@ Total Spent So Far: ${totalSpent} ${baseCurrency}`;
       },
     });
 
+    console.log(`🤖 [${new Date().toISOString()}] [Bedrock Request] Invoking model: ${MODEL_ID}`);
+    console.log(`   System Prompt Length: ${systemPrompt.length} chars`);
+    console.log(`   User Message Length: ${userMessage.length} chars`);
+    console.log(`   Payload:`, body);
+
     const command = new InvokeModelCommand({
       modelId: MODEL_ID,
       contentType: 'application/json',
@@ -172,9 +177,14 @@ Total Spent So Far: ${totalSpent} ${baseCurrency}`;
       body,
     });
 
+    const startTime = Date.now();
     const response = await bedrock.send(command);
+    const duration = Date.now() - startTime;
     const decoded = JSON.parse(Buffer.from(response.body).toString('utf-8'));
     const responseText = decoded.output.message.content[0].text.trim();
+
+    console.log(`✅ [${new Date().toISOString()}] [Bedrock Response] Succeeded in ${duration}ms`);
+    console.log(`   Response Text:`, responseText);
 
     let parsedData;
     try {
