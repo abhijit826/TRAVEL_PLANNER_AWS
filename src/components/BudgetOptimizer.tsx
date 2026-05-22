@@ -18,6 +18,9 @@ import {
   Coins,
   ArrowRight,
   CheckCircle2,
+  Edit2,
+  Check,
+  X,
 } from 'lucide-react';
 import api from '../utils/api';
 
@@ -97,6 +100,19 @@ const BudgetOptimizer: React.FC = () => {
   const [convFrom, setConvFrom] = useState('EUR');
   const [convTo, setConvTo] = useState('USD');
 
+  // Budget Editor State
+  const [isEditingBudget, setIsEditingBudget] = useState(false);
+  const [newBudget, setNewBudget] = useState('0');
+  const [newBaseCurrency, setNewBaseCurrency] = useState('USD');
+
+  // Sync budget editor state with current selected trip
+  useEffect(() => {
+    if (selectedTrip) {
+      setNewBudget(selectedTrip.budget || '0');
+      setNewBaseCurrency(selectedTrip.baseCurrency || 'USD');
+    }
+  }, [selectedTrip]);
+
   // Load Trips
   useEffect(() => {
     const fetchTrips = async () => {
@@ -138,6 +154,12 @@ const BudgetOptimizer: React.FC = () => {
   // Extract number of days from duration string (e.g. "5 days" or "5")
   const tripDurationDays = useMemo(() => {
     if (!selectedTrip?.duration) return 1;
+    const durationLower = selectedTrip.duration.toLowerCase();
+    if (durationLower.includes('weekend-getaway')) return 3;
+    if (durationLower.includes('short-trip')) return 7;
+    if (durationLower.includes('medium-trip')) return 14;
+    if (durationLower.includes('long-trip')) return 21;
+
     const match = selectedTrip.duration.match(/\d+/);
     return match ? Math.max(parseInt(match[0]), 1) : 1;
   }, [selectedTrip]);
@@ -308,6 +330,46 @@ const BudgetOptimizer: React.FC = () => {
     }
   };
 
+  // Save edited budget and base currency
+  const handleSaveBudget = async () => {
+    if (!selectedTrip) return;
+    const parsedBudget = parseFloat(newBudget);
+    if (isNaN(parsedBudget) || parsedBudget < 0) {
+      alert('Please enter a valid budget amount.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      // Recalculate converted amount for all expenses based on newBaseCurrency
+      const recalculatedExpenses = expenses.map((exp) => {
+        const converted = convertCurrency(exp.amount, exp.currency, newBaseCurrency);
+        return {
+          ...exp,
+          convertedAmount: parseFloat(converted.toFixed(2)),
+        };
+      });
+
+      const response = await api.put(`/api/trips/${selectedTrip._id}`, {
+        budget: newBudget,
+        baseCurrency: newBaseCurrency,
+        expenses: recalculatedExpenses,
+      });
+
+      setSelectedTrip(response.data);
+      // Also update trips array state to sync changes in selection dropdown
+      setTrips((prevTrips) =>
+        prevTrips.map((t) => (t._id === selectedTrip._id ? response.data : t))
+      );
+      setIsEditingBudget(false);
+    } catch (err) {
+      console.error('Error saving budget and currency:', err);
+      alert('Failed to save budget settings. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // Trigger AI Optimization Insights
   const triggerAIOptimizer = async () => {
     if (!selectedTrip) return;
@@ -439,14 +501,76 @@ const BudgetOptimizer: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               
               {/* Total Budget */}
-              <div className="bg-white/5 backdrop-blur-md border border-white/10 p-6 rounded-2xl relative overflow-hidden">
-                <div className="absolute top-4 right-4 bg-indigo-500/20 p-2.5 rounded-xl">
-                  <DollarSign className="h-6 w-6 text-indigo-400" />
+              <div className="bg-white/5 backdrop-blur-md border border-white/10 p-6 rounded-2xl relative overflow-hidden flex flex-col justify-between min-h-[148px]">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="text-indigo-200/60 text-xs font-semibold uppercase tracking-wider">Total Budget Limit</p>
+                  </div>
+                  {!isEditingBudget ? (
+                    <button
+                      onClick={() => setIsEditingBudget(true)}
+                      className="bg-white/5 hover:bg-white/10 border border-white/10 p-1.5 rounded-lg transition-all text-indigo-300 hover:text-white relative z-10"
+                      title="Edit Budget"
+                    >
+                      <Edit2 className="h-4 w-4" />
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-1.5 relative z-10">
+                      <button
+                        onClick={handleSaveBudget}
+                        className="bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 p-1.5 rounded-lg transition-all text-emerald-400"
+                        title="Save Changes"
+                      >
+                        <Check className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          setIsEditingBudget(false);
+                          setNewBudget(selectedTrip.budget || '0');
+                          setNewBaseCurrency(selectedTrip.baseCurrency || 'USD');
+                        }}
+                        className="bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 p-1.5 rounded-lg transition-all text-red-400"
+                        title="Cancel"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <p className="text-indigo-200/60 text-xs font-semibold uppercase tracking-wider">Total Budget Limit</p>
-                <h3 className="text-3xl font-extrabold mt-2">
-                  {totalBudget.toLocaleString()} <span className="text-sm font-normal text-indigo-300">{baseCurrency}</span>
-                </h3>
+
+                {!isEditingBudget && (
+                  <div className="absolute top-4 right-4 bg-indigo-500/20 p-2.5 rounded-xl pointer-events-none opacity-40 md:opacity-100">
+                    <DollarSign className="h-6 w-6 text-indigo-400" />
+                  </div>
+                )}
+
+                {isEditingBudget ? (
+                  <div className="mt-3 flex gap-2 items-center">
+                    <input
+                      type="number"
+                      value={newBudget}
+                      onChange={(e) => setNewBudget(e.target.value)}
+                      className="bg-slate-900/80 border border-white/20 rounded-lg px-2.5 py-1 text-sm text-white focus:outline-none focus:border-indigo-500 w-24 font-bold"
+                      placeholder="Budget"
+                    />
+                    <select
+                      value={newBaseCurrency}
+                      onChange={(e) => setNewBaseCurrency(e.target.value)}
+                      className="bg-slate-900/80 border border-white/20 rounded-lg px-2.5 py-1 text-sm text-white focus:outline-none focus:border-indigo-500 font-bold"
+                    >
+                      {Object.keys(STATIC_EXCHANGE_RATES).map((curr) => (
+                        <option key={curr} value={curr} className="bg-slate-950">
+                          {curr}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <h3 className="text-3xl font-extrabold mt-2">
+                    {totalBudget.toLocaleString()} <span className="text-sm font-normal text-indigo-300">{baseCurrency}</span>
+                  </h3>
+                )}
+
                 <p className="text-indigo-200/50 text-xs mt-3">Duration: {selectedTrip.duration}</p>
               </div>
 
