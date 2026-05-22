@@ -15,6 +15,7 @@ import AuthPage from './components/auth/AuthPage';
 import Logout from './components/auth/Logout';
 import ProtectedRoute from './components/ProtectedRoute';
 import EditProfile from './components/EditProfile';
+import PackingPage from './pages/PackingPage';
 
 const GMAPS_LIBRARIES: ('places')[] = ['places'];
 
@@ -34,6 +35,7 @@ function App() {
           <Route path="/wallet" element={<ProtectedRoute><WalletPage /></ProtectedRoute>} />
           <Route path="/concierge" element={<ProtectedRoute><ConciergePage /></ProtectedRoute>} />
           <Route path="/budget" element={<ProtectedRoute><BudgetPage /></ProtectedRoute>} />
+          <Route path="/packing" element={<ProtectedRoute><PackingPage /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/mytrips" element={<ProtectedRoute><MyTrips /></ProtectedRoute>} />
           <Route path="/auth" element={<AuthPage />} />

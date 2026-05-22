@@ -131,12 +131,20 @@ const MyTrips: React.FC = () => {
                           <Trash2 className="h-5 w-5" />
                         </motion.button>
                       </div>
-                      <Link
-                        to={`/budget?tripId=${trip._id}`}
-                        className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white py-2.5 px-4 rounded-lg hover:from-indigo-600 hover:to-purple-700 text-center transition-colors font-medium block"
-                      >
-                        Budget Optimizer
-                      </Link>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Link
+                          to={`/budget?tripId=${trip._id}`}
+                          className="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-2 rounded-lg text-center transition-colors font-medium text-sm flex items-center justify-center"
+                        >
+                          Budget
+                        </Link>
+                        <Link
+                          to={`/packing?tripId=${trip._id}`}
+                          className="bg-purple-600 hover:bg-purple-700 text-white py-2 px-2 rounded-lg text-center transition-colors font-medium text-sm flex items-center justify-center"
+                        >
+                          Packing
+                        </Link>
+                      </div>
                     </div>
                   </motion.div>
                 ))}
@@ -241,6 +249,13 @@ const MyTrips: React.FC = () => {
                     className="w-full py-2.5 px-4 bg-gradient-to-r from-indigo-600 to-purple-700 text-white text-center rounded-lg hover:from-indigo-700 hover:to-purple-800 transition-colors font-medium flex items-center justify-center gap-2"
                   >
                     Optimize Budget
+                  </Link>
+                  <Link
+                    to={`/packing?tripId=${selectedTrip._id}`}
+                    onClick={() => setSelectedTrip(null)}
+                    className="w-full py-2.5 px-4 bg-gradient-to-r from-purple-600 to-indigo-700 text-white text-center rounded-lg hover:from-purple-700 hover:to-indigo-800 transition-colors font-medium flex items-center justify-center gap-2"
+                  >
+                    Packing Assistant
                   </Link>
                   <div className="flex gap-3">
                     <motion.button

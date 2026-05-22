@@ -84,7 +84,7 @@ router.put('/trips/:id', async (req, res) => {
     const trip = await Trip.findById(req.user.userId, req.params.id);
     if (!trip) return res.status(404).json({ error: 'Trip not found' });
 
-    const { destination, duration, budget, companions, activities, baseCurrency, expenses, predictions } = req.body;
+    const { destination, duration, budget, companions, activities, baseCurrency, expenses, predictions, packingList } = req.body;
     const updates = {};
     if (destination !== undefined) updates.destination = destination;
     if (duration !== undefined) updates.duration = duration;
@@ -94,6 +94,7 @@ router.put('/trips/:id', async (req, res) => {
     if (baseCurrency !== undefined) updates.baseCurrency = baseCurrency;
     if (expenses !== undefined) updates.expenses = expenses;
     if (predictions !== undefined) updates.predictions = predictions;
+    if (packingList !== undefined) updates.packingList = packingList;
 
     const updatedTrip = await Trip.update(req.user.userId, req.params.id, updates);
     res.json(updatedTrip);
@@ -210,6 +211,151 @@ Total Spent So Far: ${totalSpent} ${baseCurrency}`;
   } catch (error) {
     console.error('Optimize budget error:', error);
     res.status(500).json({ error: 'Failed to optimize budget', details: error.message });
+  }
+});
+
+// ── POST /api/trips/:id/packing/generate ─────────────────────────────────────────
+router.post('/trips/:id/packing/generate', async (req, res) => {
+  try {
+    const trip = await Trip.findById(req.user.userId, req.params.id);
+    if (!trip) return res.status(404).json({ error: 'Trip not found' });
+
+    const { transitMode, baggageOption, weather } = req.body;
+
+    const systemPrompt = `You are the "AI Packing Assistant" for the TravelAI application.
+Generate a comprehensive travel packing checklist based on the destination, duration, weather, companions, activities, transit mode, and baggage rules.
+
+Include transit-specific tips:
+- For Flights: Liquid limitations (3-1-1 rule), carry-on vs checked baggage security advice.
+- For Trains: Luggage storage security (e.g. securing bags to overhead racks, anti-theft locks), easy access to tickets/ID, snacking options.
+- For Buses: Under-bus compartment safety, keeping valuables in a daypack, motion sickness.
+- For Cars: Road trip essentials, emergency kits, accessibility of items.
+
+Also, add category-specific checklists. You MUST respond strictly with a valid JSON object matching the following structure. Do NOT include markdown code blocks, backticks, or any conversational text outside of the JSON object:
+{
+  "categories": [
+    {
+      "name": "Clothing",
+      "items": [
+        { "id": "item1", "name": "5x T-shirts", "packed": false },
+        { "id": "item2", "name": "2x Jeans", "packed": false }
+      ]
+    },
+    {
+      "name": "Toiletries",
+      "items": [
+        { "id": "item3", "name": "Toothbrush & Toothpaste", "packed": false }
+      ]
+    },
+    {
+      "name": "Documents & Money",
+      "items": [
+        { "id": "item4", "name": "Passport / ID card", "packed": false }
+      ]
+    },
+    {
+      "name": "Electronics",
+      "items": [
+        { "id": "item5", "name": "Phone charger", "packed": false }
+      ]
+    },
+    {
+      "name": "Transit Essentials",
+      "items": [
+        { "id": "item6", "name": "Noise-cancelling headphones", "packed": false }
+      ]
+    }
+  ],
+  "baggageRulesSummary": "Summary of rules or advice for the selected transit mode and baggage limit.",
+  "transitTips": [
+    "Specific tip 1...",
+    "Specific tip 2..."
+  ]
+}`;
+
+    const userMessage = `Trip Details:
+Destination: ${trip.destination}
+Duration: ${trip.duration}
+Companions: ${trip.companions}
+Planned Activities: ${trip.activities ? trip.activities.join(', ') : 'None'}
+
+Packing Preferences:
+Transit Mode: ${transitMode || 'Not specified'}
+Baggage Option: ${baggageOption || 'Not specified'}
+Expected Weather: ${weather || 'Not specified'}`;
+
+    const body = JSON.stringify({
+      system: [{ text: systemPrompt }],
+      messages: [{
+        role: 'user',
+        content: [{ text: userMessage }]
+      }],
+      inferenceConfig: {
+        max_new_tokens: 2048,
+        temperature: 0.5,
+      },
+    });
+
+    console.log(`🤖 [${new Date().toISOString()}] [Bedrock Request] Invoking model for packing assistant: ${MODEL_ID}`);
+    const command = new InvokeModelCommand({
+      modelId: MODEL_ID,
+      contentType: 'application/json',
+      accept: 'application/json',
+      body,
+    });
+
+    const response = await bedrock.send(command);
+    const decoded = JSON.parse(Buffer.from(response.body).toString('utf-8'));
+    const responseText = decoded.output.message.content[0].text.trim();
+
+    let parsedData;
+    try {
+      let cleanText = responseText;
+      if (cleanText.startsWith('```')) {
+        cleanText = cleanText.replace(/^```json\s*/, '').replace(/```\s*$/, '').trim();
+      }
+      parsedData = JSON.parse(cleanText);
+    } catch (parseError) {
+      console.warn('Failed to parse Bedrock JSON response for packing:', responseText);
+      parsedData = {
+        categories: [
+          {
+            name: "Clothing",
+            items: [{ id: "c1", name: "Shirts & Pants", packed: false }]
+          },
+          {
+            name: "Toiletries",
+            items: [{ id: "t1", name: "Basic toiletries kit", packed: false }]
+          },
+          {
+            name: "Documents & Money",
+            items: [{ id: "d1", name: "ID & Tickets", packed: false }]
+          }
+        ],
+        baggageRulesSummary: "No specific rules found. Please check with your travel operator.",
+        transitTips: ["Keep your valuables secure and close at all times."]
+      };
+    }
+
+    // Ensure all items have unique IDs
+    if (parsedData.categories) {
+      parsedData.categories = parsedData.categories.map((cat, catIdx) => ({
+        ...cat,
+        items: (cat.items || []).map((item, itemIdx) => ({
+          ...item,
+          id: item.id || `item_${catIdx}_${itemIdx}_${Date.now()}`,
+          packed: !!item.packed
+        }))
+      }));
+    }
+
+    // Update the trip with the generated packing list
+    await Trip.update(req.user.userId, req.params.id, { packingList: parsedData });
+
+    res.json(parsedData);
+  } catch (error) {
+    console.error('Generate packing checklist error:', error);
+    res.status(500).json({ error: 'Failed to generate packing list', details: error.message });
   }
 });
 

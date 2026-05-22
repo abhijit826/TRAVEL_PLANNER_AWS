@@ -77,7 +77,7 @@ const Trip = {
 
     const updatableFields = [
       'destination', 'duration', 'budget', 'companions', 'activities',
-      'baseCurrency', 'expenses', 'predictions'
+      'baseCurrency', 'expenses', 'predictions', 'packingList'
     ];
 
     updatableFields.forEach((field) => {
