@@ -35,6 +35,24 @@ app.use(cors({
 app.use(bodyParser.json());
 app.use(express.json());
 
+// ── Request Logger Middleware ────────────────────────────────────────────────
+app.use((req, res, next) => {
+  console.log(`📡 [${new Date().toISOString()}] ${req.method} ${req.originalUrl || req.url}`);
+  if (req.method !== 'GET' && req.body && Object.keys(req.body).length > 0) {
+    // Avoid logging sensitive tokens if password is present
+    const logBody = { ...req.body };
+    if (logBody.password) logBody.password = '***';
+    console.log('📦 Request Body:', JSON.stringify(logBody));
+  }
+  
+  const originalEnd = res.end;
+  res.end = function (chunk, encoding) {
+    console.log(`⏱️ [${new Date().toISOString()}] Response Status: ${res.statusCode} for ${req.method} ${req.originalUrl || req.url}`);
+    return originalEnd.apply(res, arguments);
+  };
+  next();
+});
+
 // ── Health Check (for ALB / monitoring) ──────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok', region: process.env.AWS_REGION }));
 
