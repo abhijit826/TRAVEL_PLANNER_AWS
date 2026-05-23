@@ -23,10 +23,14 @@
 <img width="1917" height="957" alt="image" src="https://github.com/user-attachments/assets/a088bd5d-5cc9-4ecc-88de-d0faeacf1d83" />
 <img width="1343" height="825" alt="Screenshot 2026-05-22 131436" src="https://github.com/user-attachments/assets/20e0f783-2547-4345-b7c0-02d94fbf03ad" />
 <img width="1125" height="866" alt="Screenshot 2026-05-22 131532" src="https://github.com/user-attachments/assets/08524e74-4e6b-4132-86d0-915d2144924d" />
+<img width="1535" height="963" alt="image" src="https://github.com/user-attachments/assets/90c76889-c10e-41fd-a772-5d268c4065cb" />
+<img width="1468" height="959" alt="image" src="https://github.com/user-attachments/assets/802beaab-154a-40f1-8ef5-9cf357115e96" />
 
 Welcome to the AI TARVEL Planner! This is a React-based web application designed to help users plan their trips, view itineraries, and interact with a dynamic map interface. The frontend is built with modern tools and is intended to work with a backend (currently in development) for full functionality.
 ## Blockchain-Secured Documents
 ![Screenshot 2025-03-02 092627](https://github.com/user-attachments/assets/a1225b09-c0e9-40ab-9684-dba08611b501)
+
+
 ###  Your documents are encrypted and secured using blockchain technology.
 
 
