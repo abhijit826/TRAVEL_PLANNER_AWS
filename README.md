@@ -30,6 +30,8 @@ Welcome to the AI TARVEL Planner! This is a React-based web application designed
 ## Blockchain-Secured Documents
 <img width="1181" height="852" alt="image" src="https://github.com/user-attachments/assets/9e55fb2d-4e7b-4c5e-bfdf-2820d2358bba" />
 <img width="1331" height="841" alt="image" src="https://github.com/user-attachments/assets/64b45033-2661-4a08-86ca-fb985fb552f6" />
+<img width="996" height="850" alt="image" src="https://github.com/user-attachments/assets/336d4bb1-bca1-42b6-aeae-8dc927cf17f0" />
+
 
 ![Screenshot 2025-03-02 092627](https://github.com/user-attachments/assets/a1225b09-c0e9-40ab-9684-dba08611b501)
 
