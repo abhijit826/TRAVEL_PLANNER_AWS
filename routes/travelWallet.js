@@ -311,4 +311,124 @@ ${JSON.stringify(safeDocs, null, 2)}`;
   }
 });
 
+// ── POST /api/travel-wallet/risk-radar (AI Travel Risk Radar) ─────────────────────
+router.post('/risk-radar', protect, async (req, res) => {
+  const { destination: reqDestination, tripId, nationality } = req.body;
+  let destination = reqDestination;
+
+  try {
+    if (tripId) {
+      const trip = await Trip.findById(req.user.userId, tripId);
+      if (trip) {
+        destination = trip.destination;
+      }
+    }
+
+    if (!destination) {
+      return res.status(400).json({ message: 'destination or tripId is required' });
+    }
+
+    const systemPrompt = `You are the "AI Travel Risk Radar" security analyst for the TravelAI application.
+Analyze the requested travel destination and generate a comprehensive travel risk assessment.
+
+Provide:
+1. Overall Risk Level: Must be exactly one of: "Low", "Moderate", "High", "Extreme".
+2. Overall Risk Reason: A concise summary of the safety context.
+3. Political Instability Alerts: Ongoing protests, active conflicts, strikes, or political events.
+4. Natural Disaster Alerts: Active weather warnings, volcanic activity, earthquakes, or seasonal weather hazards.
+5. Health Outbreak Warnings: Vaccine advisories, active outbreaks, quarantine requirements, or local disease advisories.
+6. Scam Risk Index: An integer between 0 and 100 representing the likelihood/frequency of tourist scams.
+7. Typical Scams list: Typical tourist scams and how to avoid them.
+8. Unsafe Areas / Neighborhoods: Specific areas, roads, or districts that are unsafe or require high caution, labeled as "High" or "Extreme" risk, with a description of the danger.
+9. Emergency Contacts: Local numbers for Police, Ambulance, Fire department, and user's embassy if a user nationality is provided.
+
+You MUST respond strictly with a valid JSON object matching the following structure. Do NOT include markdown code blocks, backticks, or any conversational text outside of the JSON object:
+{
+  "overallRisk": "Moderate", 
+  "riskReason": "Generally safe for tourists, but high caution is recommended due to pickpocketing and regional alerts.",
+  "politicalAlerts": [
+    "Public transit strikes planned for next Thursday",
+    "Minor political demonstrations near the Parliament building"
+  ],
+  "naturalDisasters": [
+    "Severe heatwave advisory active; drink plenty of water",
+    "High risk of sudden thunderstorms and flooding in low-lying sectors"
+  ],
+  "healthWarnings": [
+    "Dengue fever warning; use insect repellent",
+    "Routine vaccinations recommended before entry"
+  ],
+  "scamIndex": 62,
+  "typicalScams": [
+    {
+      "scam": "Unmetered Taxis",
+      "avoidance": "Only use official airport taxi stands or pre-booked rideshare apps."
+    },
+    {
+      "scam": "Petition Signature Distraction",
+      "avoidance": "Ignore street groups attempting to get you to sign papers; this is a pickpocketing cover."
+    }
+  ],
+  "unsafeAreas": [
+    {
+      "area": "Red Light District / Northern Outskirts",
+      "risk": "High",
+      "reason": "Increased rates of theft and street solicitation after dark."
+    },
+    {
+      "area": "Central Transit Hub at Night",
+      "risk": "Moderate",
+      "reason": "Common target area for pickpockets and scammers."
+    }
+  ],
+  "emergencyContacts": {
+    "police": "112",
+    "ambulance": "112",
+    "fire": "112",
+    "embassy": "Verify at the nearest diplomatic mission."
+  }
+}`;
+
+    const userMessage = `Destination: ${destination}
+User Nationality: ${nationality || 'Not specified'}`;
+
+    const body = JSON.stringify({
+      system: [{ text: systemPrompt }],
+      messages: [{
+        role: 'user',
+        content: [{ text: userMessage }]
+      }],
+      inferenceConfig: {
+        max_new_tokens: 2048,
+        temperature: 0.3,
+      }
+    });
+
+    console.log(`🤖 [${new Date().toISOString()}] [Bedrock Request - Risk Radar] Evaluating safety for ${destination}`);
+    const command = new InvokeModelCommand({
+      modelId: MODEL_ID,
+      contentType: 'application/json',
+      accept: 'application/json',
+      body,
+    });
+
+    const response = await bedrock.send(command);
+    const decoded = JSON.parse(Buffer.from(response.body).toString('utf-8'));
+    const responseText = decoded.output.message.content[0].text.trim();
+
+    console.log(`✅ [${new Date().toISOString()}] [Bedrock Response - Risk Radar] Succeeded`);
+
+    let cleanText = responseText;
+    if (cleanText.startsWith('```')) {
+      cleanText = cleanText.replace(/^```json\s*/, '').replace(/```\s*$/, '').trim();
+    }
+
+    const parsedData = JSON.parse(cleanText);
+    res.json(parsedData);
+  } catch (error) {
+    console.error('Risk radar error:', error);
+    res.status(500).json({ message: 'Failed to retrieve travel risk radar', error: error.message });
+  }
+});
+
 module.exports = router;

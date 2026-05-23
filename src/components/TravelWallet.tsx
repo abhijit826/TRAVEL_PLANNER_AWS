@@ -5,7 +5,8 @@ import {
   CreditCard, FileText, Plus, Edit, Trash2, Lock, Shield,
   AlertCircle, Syringe, Car, Globe, User, Briefcase, Camera,
   CheckCircle, Phone, Mail, MapPin, Calendar, Hash, Info,
-  Sparkles, RefreshCw, ShieldAlert, Check
+  Sparkles, RefreshCw, ShieldAlert, Check, HelpCircle,
+  CloudLightning, AlertTriangle
 } from 'lucide-react';
 
 interface TravelDocument {
@@ -73,6 +74,34 @@ interface ReadinessData {
   transitAdvice: string[];
 }
 
+interface TypicalScam {
+  scam: string;
+  avoidance: string;
+}
+
+interface UnsafeArea {
+  area: string;
+  risk: 'High' | 'Extreme' | 'Moderate' | 'Low';
+  reason: string;
+}
+
+interface RiskRadarData {
+  overallRisk: 'Low' | 'Moderate' | 'High' | 'Extreme';
+  riskReason: string;
+  politicalAlerts: string[];
+  naturalDisasters: string[];
+  healthWarnings: string[];
+  scamIndex: number;
+  typicalScams: TypicalScam[];
+  unsafeAreas: UnsafeArea[];
+  emergencyContacts: {
+    police: string;
+    ambulance: string;
+    fire: string;
+    embassy: string;
+  };
+}
+
 type DocType = TravelDocument['type'];
 
 const DOC_CONFIG: Record<DocType, { label: string; gradient: string; icon: React.ReactNode; bg: string }> = {
@@ -114,7 +143,7 @@ const Input = ({ label, name, type='text', value, onChange, placeholder }: {
 );
 
 export default function TravelWallet() {
-  const [activeTab, setActiveTab] = useState<'wallet' | 'readiness'>('wallet');
+  const [activeTab, setActiveTab] = useState<'wallet' | 'readiness' | 'risk'>('wallet');
   const [documents, setDocuments] = useState<TravelDocument[]>([]);
   const [selected, setSelected] = useState<TravelDocument|null>(null);
   const [mode, setMode] = useState<'view'|'add'|'edit'|'delete'>('view');
@@ -132,6 +161,13 @@ export default function TravelWallet() {
   const [isCheckingReadiness, setIsCheckingReadiness] = useState(false);
   const [readinessData, setReadinessData] = useState<ReadinessData | null>(null);
   const [readinessError, setReadinessError] = useState<string | null>(null);
+
+  // AI Travel Risk Radar States
+  const [riskDestination, setRiskDestination] = useState<string>('');
+  const [selectedRiskTripId, setSelectedRiskTripId] = useState<string>('custom');
+  const [isCheckingRisk, setIsCheckingRisk] = useState(false);
+  const [riskData, setRiskData] = useState<RiskRadarData | null>(null);
+  const [riskError, setRiskError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchDocs();
@@ -252,6 +288,41 @@ export default function TravelWallet() {
       setReadinessError(err.response?.data?.message || err.message || 'Verification failed');
     } finally {
       setIsCheckingReadiness(false);
+    }
+  };
+
+  const handleScanRiskRadar = async () => {
+    let dest = riskDestination.trim();
+    let bodyPayload: any = {};
+
+    if (selectedRiskTripId !== 'custom') {
+      bodyPayload.tripId = selectedRiskTripId;
+    } else {
+      if (!dest) {
+        alert('Please enter a destination or select a trip.');
+        return;
+      }
+      bodyPayload.destination = dest;
+    }
+
+    setIsCheckingRisk(true);
+    setRiskError(null);
+    setRiskData(null);
+
+    try {
+      // Find traveler nationality if passport exists in wallet
+      const passportDoc = documents.find(d => d.type === 'passport');
+      if (passportDoc?.nationality) {
+        bodyPayload.nationality = passportDoc.nationality;
+      }
+
+      const response = await api.post('/api/travel-wallet/risk-radar', bodyPayload);
+      setRiskData(response.data);
+    } catch (err: any) {
+      console.error('Error running risk radar audit:', err);
+      setRiskError(err.response?.data?.message || err.message || 'Risk audit failed');
+    } finally {
+      setIsCheckingRisk(false);
     }
   };
 
@@ -462,7 +533,7 @@ export default function TravelWallet() {
               <><Camera className="h-8 w-8 text-gray-400 mb-2"/><p className="text-sm text-gray-400">Click to upload document image</p></>
             )}
           </div>
-          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handlePhoto}/>
+          <input file-id="document-photo-uploader" ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handlePhoto}/>
 
           {form.photoUrl && !isAnalyzingDoc && (
             <button
@@ -547,15 +618,27 @@ export default function TravelWallet() {
 
   return (
     <div className="min-h-screen bg-slate-950 py-10 px-4 sm:px-6">
+      {/* Dynamic Keyframes for Sonar and Radar sweeps */}
+      <style>{`
+        @keyframes sonar-wave {
+          0% { transform: scale(0.6); opacity: 0.8; }
+          100% { transform: scale(2.0); opacity: 0; }
+        }
+        @keyframes radar-sweep {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
+
       {/* Header */}
       <div className="max-w-6xl mx-auto mb-8">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
             <h1 className="text-3xl font-extrabold flex items-center gap-2 bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
-              <Shield className="h-8 w-8 text-indigo-400" /> Travel Wallet & Eligibility Engine
+              <Shield className="h-8 w-8 text-indigo-400" /> Travel Wallet & Safety Hub
             </h1>
             <p className="text-gray-400 mt-1 text-sm">
-              Securely store documents, extract data automatically, and check your global readiness metrics.
+              Securely store documents, verify travel compliance, and monitor global threat intelligence.
             </p>
           </div>
           
@@ -572,7 +655,13 @@ export default function TravelWallet() {
                 onClick={() => setActiveTab('readiness')}
                 className={`px-4 py-2 text-xs font-bold rounded-xl transition ${activeTab === 'readiness' ? 'bg-indigo-600/30 text-indigo-300 border border-indigo-500/30' : 'text-gray-400 hover:text-gray-200'}`}
               >
-                AI Eligibility Check
+                AI Readiness Check
+              </button>
+              <button
+                onClick={() => setActiveTab('risk')}
+                className={`px-4 py-2 text-xs font-bold rounded-xl transition ${activeTab === 'risk' ? 'bg-indigo-600/30 text-indigo-300 border border-indigo-500/30' : 'text-gray-400 hover:text-gray-200'}`}
+              >
+                Risk Radar
               </button>
             </div>
             
@@ -646,7 +735,7 @@ export default function TravelWallet() {
             </AnimatePresence>
           </div>
         </div>
-      ) : (
+      ) : activeTab === 'readiness' ? (
         // ── READINESS TAB CONTENT ────────────────────────────────────────────────
         <div className="max-w-6xl mx-auto space-y-6">
           {/* Trip selector bar */}
@@ -877,6 +966,318 @@ export default function TravelWallet() {
                       </div>
                     ))}
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        // ── RISK RADAR TAB CONTENT ───────────────────────────────────────────────
+        <div className="max-w-6xl mx-auto space-y-6">
+          {/* Target destination bar */}
+          <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-6 rounded-2xl shadow-xl flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <Globe className="h-6 w-6 text-red-400 shrink-0" />
+              <div>
+                <h3 className="font-bold text-gray-200">AI Travel Risk Radar</h3>
+                <p className="text-xs text-gray-400">Live global monitoring of political unrest, natural anomalies, scams, and health risks.</p>
+              </div>
+            </div>
+            
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              {/* Trip selector quick-select */}
+              <select
+                value={selectedRiskTripId}
+                onChange={(e) => {
+                  setSelectedRiskTripId(e.target.value);
+                  if (e.target.value !== 'custom') {
+                    const trip = trips.find(t => t._id === e.target.value);
+                    if (trip) setRiskDestination(trip.destination);
+                  }
+                }}
+                className="px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-gray-200 outline-none focus:border-indigo-400 transition text-sm"
+              >
+                <option value="custom" className="bg-gray-900 text-gray-200">-- Search Custom Location --</option>
+                {trips.map((t) => (
+                  <option key={t._id} value={t._id} className="bg-gray-900 text-gray-200">
+                    Trip: {t.destination}
+                  </option>
+                ))}
+              </select>
+
+              {/* Custom destination input */}
+              {selectedRiskTripId === 'custom' && (
+                <input
+                  type="text"
+                  placeholder="Enter city or country..."
+                  value={riskDestination}
+                  onChange={(e) => setRiskDestination(e.target.value)}
+                  className="px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-gray-200 outline-none focus:border-indigo-400 transition text-sm"
+                />
+              )}
+
+              <button
+                type="button"
+                onClick={handleScanRiskRadar}
+                disabled={isCheckingRisk}
+                className="py-2.5 px-6 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-1.5 shadow-lg shadow-rose-600/15 transition disabled:opacity-50"
+              >
+                {isCheckingRisk ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    <span>Scanning Radar...</span>
+                  </>
+                ) : (
+                  <>
+                    <Globe className="h-4 w-4 text-rose-200" />
+                    <span>Audit Location</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {riskError && (
+            <div className="p-4 bg-rose-500/10 border border-rose-500/20 text-rose-300 rounded-xl text-sm flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 shrink-0" />
+              <span>{riskError}</span>
+            </div>
+          )}
+
+          {isCheckingRisk && (
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-16 text-center shadow-xl backdrop-blur-xl relative overflow-hidden flex flex-col items-center justify-center">
+              {/* Pulsing Sonar Graphic */}
+              <div className="relative w-40 h-40 flex items-center justify-center mb-6">
+                <div className="absolute inset-0 rounded-full border border-red-500/20 animate-[sonar-wave_2s_infinite]" />
+                <div className="absolute inset-4 rounded-full border border-red-500/35 animate-[sonar-wave_2s_infinite_0.5s]" />
+                <div className="absolute inset-8 rounded-full border border-red-500/50 animate-[sonar-wave_2s_infinite_1.0s]" />
+                
+                {/* Sonar sweep line */}
+                <div className="absolute inset-0 rounded-full border border-red-500/10 animate-[radar-sweep_4s_linear_infinite]" style={{
+                  background: 'conic-gradient(from 0deg, rgba(239, 68, 68, 0.15) 0deg, rgba(239, 68, 68, 0.03) 120deg, transparent 240deg)'
+                }} />
+                
+                <Globe className="h-10 w-10 text-red-500 animate-pulse z-10" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-200">Sweeping Risk Radar</h3>
+              <p className="text-sm text-gray-400 max-w-sm mx-auto mt-2 leading-relaxed">
+                Checking geopolitical safety reports, natural disaster alerts, local outbreak updates, and common travel scams...
+              </p>
+            </div>
+          )}
+
+          {!riskData && !isCheckingRisk && (
+            <div className="bg-white/5 border border-white/10 rounded-2xl py-20 px-6 text-center shadow-xl backdrop-blur-xl flex flex-col items-center justify-center">
+              <ShieldAlert className="h-12 w-12 text-red-400/50 mb-4" />
+              <h3 className="text-lg font-bold text-gray-200">No Location Audited</h3>
+              <p className="text-sm text-gray-400 max-w-sm mx-auto mt-2 leading-relaxed">
+                Input a custom travel destination or quick-select an upcoming trip, then click "Audit Location" to scan safety statistics.
+              </p>
+            </div>
+          )}
+
+          {riskData && !isCheckingRisk && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Left Column: Overall status and Scam index */}
+              <div className="lg:col-span-1 space-y-6">
+                {/* Risk Level Banner */}
+                <div className={`border rounded-2xl p-6 shadow-xl relative overflow-hidden backdrop-blur-xl ${
+                  riskData.overallRisk === 'Low' ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400' :
+                  riskData.overallRisk === 'Moderate' ? 'bg-amber-500/5 border-amber-500/20 text-amber-400' :
+                  riskData.overallRisk === 'High' ? 'bg-orange-500/5 border-orange-500/20 text-orange-400' :
+                  'bg-red-500/10 border-red-500/25 text-red-400'
+                }`}>
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="text-xs font-bold uppercase tracking-widest text-gray-400">Audit Status</span>
+                    <span className={`px-3 py-1 rounded-full text-xs font-black border ${
+                      riskData.overallRisk === 'Low' ? 'bg-emerald-500/10 border-emerald-500/20' :
+                      riskData.overallRisk === 'Moderate' ? 'bg-amber-500/10 border-amber-500/20' :
+                      riskData.overallRisk === 'High' ? 'bg-orange-500/10 border-orange-500/20' :
+                      'bg-red-500/10 border-red-500/20'
+                    }`}>
+                      {riskData.overallRisk} Risk
+                    </span>
+                  </div>
+                  <h3 className="text-2xl font-black text-white">{riskDestination || 'Destination'}</h3>
+                  <p className="text-xs text-gray-300 mt-3 leading-relaxed">
+                    {riskData.riskReason}
+                  </p>
+                </div>
+
+                {/* Scam Index Meter */}
+                <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl space-y-4">
+                  <div className="flex justify-between items-center border-b border-white/5 pb-3">
+                    <h3 className="font-extrabold text-sm text-gray-200 flex items-center gap-1.5">
+                      <HelpCircle className="h-4.5 w-4.5 text-indigo-400" /> Scam Risk Index
+                    </h3>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                      riskData.scamIndex > 70 ? 'bg-red-500/15 text-red-400 border border-red-500/20' :
+                      riskData.scamIndex > 40 ? 'bg-amber-500/15 text-amber-400 border border-amber-500/20' :
+                      'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                    }`}>{riskData.scamIndex}/100</span>
+                  </div>
+
+                  {/* Meter slider */}
+                  <div className="space-y-1.5">
+                    <div className="w-full bg-white/5 h-2.5 rounded-full overflow-hidden border border-white/10 relative">
+                      <div
+                        className={`h-full rounded-full ${
+                          riskData.scamIndex > 70 ? 'bg-gradient-to-r from-orange-500 to-red-500' :
+                          riskData.scamIndex > 40 ? 'bg-gradient-to-r from-yellow-400 to-amber-500' :
+                          'bg-gradient-to-r from-emerald-500 to-teal-400'
+                        }`}
+                        style={{ width: `${riskData.scamIndex}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-[10px] text-gray-500 font-bold uppercase tracking-wider">
+                      <span>Low</span>
+                      <span>Moderate</span>
+                      <span>High</span>
+                    </div>
+                  </div>
+
+                  {/* Typical Scams List */}
+                  <div className="space-y-3 pt-3">
+                    <p className="text-xs font-bold text-gray-300">Common Scams & Preventions:</p>
+                    <div className="space-y-2.5 max-h-[220px] overflow-y-auto pr-1">
+                      {riskData.typicalScams.map((scamItem, idx) => (
+                        <div key={idx} className="bg-white/5 p-3 rounded-xl border border-white/5 space-y-1">
+                          <p className="text-xs font-bold text-indigo-300">{scamItem.scam}</p>
+                          <p className="text-[11px] text-gray-400 leading-relaxed">{scamItem.avoidance}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column: Threats Advisory Feed and Unsafe Area Heatmap */}
+              <div className="lg:col-span-2 space-y-6">
+                {/* Advisory threat feeds */}
+                <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl space-y-4">
+                  <h3 className="font-extrabold text-sm text-gray-200 border-b border-white/5 pb-3 flex items-center gap-1.5">
+                    <ShieldAlert className="h-4.5 w-4.5 text-indigo-400" /> Active Threat Feeds
+                  </h3>
+
+                  <div className="space-y-4">
+                    {/* Political Alert section */}
+                    <div className="space-y-2">
+                      <p className="text-xs font-bold text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <AlertTriangle className="h-3.5 w-3.5" /> Political & Civil Alerts
+                      </p>
+                      {riskData.politicalAlerts && riskData.politicalAlerts.length > 0 ? (
+                        <ul className="space-y-1.5">
+                          {riskData.politicalAlerts.map((item, idx) => (
+                            <li key={idx} className="flex gap-2 text-xs text-gray-300 leading-relaxed">
+                              <span className="text-indigo-400 font-bold">•</span>
+                              <span>{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-[11px] text-gray-500 italic">No significant political instability reported.</p>
+                      )}
+                    </div>
+
+                    {/* Disasters Alert section */}
+                    <div className="space-y-2 pt-2 border-t border-white/5">
+                      <p className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <CloudLightning className="h-3.5 w-3.5" /> Environmental / Disaster Alerts
+                      </p>
+                      {riskData.naturalDisasters && riskData.naturalDisasters.length > 0 ? (
+                        <ul className="space-y-1.5">
+                          {riskData.naturalDisasters.map((item, idx) => (
+                            <li key={idx} className="flex gap-2 text-xs text-gray-300 leading-relaxed">
+                              <span className="text-amber-400 font-bold">•</span>
+                              <span>{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-[11px] text-gray-500 italic">No active weather or seismic alerts reported.</p>
+                      )}
+                    </div>
+
+                    {/* Health Outbreaks section */}
+                    <div className="space-y-2 pt-2 border-t border-white/5">
+                      <p className="text-xs font-bold text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <Syringe className="h-3.5 w-3.5" /> Health & Outbreak Warnings
+                      </p>
+                      {riskData.healthWarnings && riskData.healthWarnings.length > 0 ? (
+                        <ul className="space-y-1.5">
+                          {riskData.healthWarnings.map((item, idx) => (
+                            <li key={idx} className="flex gap-2 text-xs text-gray-300 leading-relaxed">
+                              <span className="text-rose-400 font-bold">•</span>
+                              <span>{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-[11px] text-gray-500 italic">No significant medical outbreaks reported.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Safety map / Unsafe Area Heatmap */}
+                <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl space-y-4">
+                  <div>
+                    <h3 className="font-bold text-gray-200">Safety Heatmap List</h3>
+                    <p className="text-xs text-gray-400 mt-0.5">High-caution areas and regions to avoid inside the destination.</p>
+                  </div>
+
+                  <div className="space-y-3">
+                    {riskData.unsafeAreas.map((areaInfo, idx) => (
+                      <div key={idx} className="p-3 bg-white/5 rounded-xl border border-white/5 flex items-start justify-between gap-4">
+                        <div className="space-y-1">
+                          <p className="text-xs font-bold text-gray-200">{areaInfo.area}</p>
+                          <p className="text-[11px] text-gray-400 leading-relaxed">{areaInfo.reason}</p>
+                        </div>
+
+                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${
+                          areaInfo.risk === 'Extreme' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
+                          areaInfo.risk === 'High' ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' :
+                          areaInfo.risk === 'Moderate' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+                          'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                        }`}>{areaInfo.risk}</span>
+                      </div>
+                    ))}
+                    {riskData.unsafeAreas.length === 0 && (
+                      <p className="text-xs text-gray-500 italic">No unsafe neighborhoods flagged in this sector.</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Quick Emergency Contacts */}
+                <div className="bg-gradient-to-r from-red-600/10 to-rose-600/10 backdrop-blur-xl border border-red-500/20 p-6 rounded-2xl shadow-xl space-y-4">
+                  <h3 className="font-extrabold text-sm text-red-400 flex items-center gap-1.5">
+                    <Phone className="h-4.5 w-4.5" /> Emergency Contacts
+                  </h3>
+                  
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-slate-950/40 p-2.5 rounded-xl text-center border border-white/5">
+                      <p className="text-[10px] uppercase font-bold text-gray-400">Police</p>
+                      <p className="text-lg font-black text-white mt-1">{riskData.emergencyContacts.police}</p>
+                    </div>
+                    <div className="bg-slate-950/40 p-2.5 rounded-xl text-center border border-white/5">
+                      <p className="text-[10px] uppercase font-bold text-gray-400">Ambulance</p>
+                      <p className="text-lg font-black text-white mt-1">{riskData.emergencyContacts.ambulance}</p>
+                    </div>
+                    <div className="bg-slate-950/40 p-2.5 rounded-xl text-center border border-white/5">
+                      <p className="text-[10px] uppercase font-bold text-gray-400">Fire</p>
+                      <p className="text-lg font-black text-white mt-1">{riskData.emergencyContacts.fire}</p>
+                    </div>
+                  </div>
+
+                  {riskData.emergencyContacts.embassy && (
+                    <div className="bg-slate-950/30 p-3 rounded-xl border border-white/5 flex items-start gap-2.5 text-xs">
+                      <Globe className="h-4.5 w-4.5 text-indigo-400 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-bold text-gray-300">Embassy Assistance:</p>
+                        <p className="text-gray-400 mt-0.5 leading-relaxed">{riskData.emergencyContacts.embassy}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
