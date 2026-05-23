@@ -51,6 +51,8 @@ router.delete('/documents/:id', protect, async (req, res) => {
     console.error('Error deleting document:', error);
     res.status(500).json({ message: 'Server error' });
   }
+});
+
 const Trip = require('../models/Trip');
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
 
