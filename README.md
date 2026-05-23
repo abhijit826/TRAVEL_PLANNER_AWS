@@ -28,6 +28,8 @@
 
 Welcome to the AI TARVEL Planner! This is a React-based web application designed to help users plan their trips, view itineraries, and interact with a dynamic map interface. The frontend is built with modern tools and is intended to work with a backend (currently in development) for full functionality.
 ## Blockchain-Secured Documents
+<img width="1181" height="852" alt="image" src="https://github.com/user-attachments/assets/9e55fb2d-4e7b-4c5e-bfdf-2820d2358bba" />
+
 ![Screenshot 2025-03-02 092627](https://github.com/user-attachments/assets/a1225b09-c0e9-40ab-9684-dba08611b501)
 
 
