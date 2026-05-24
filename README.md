@@ -58,7 +58,12 @@ Welcome to the AI TARVEL Planner! This is a React-based web application designed
 - Itinerary display with weather and activity details.
 - Responsive design with animations using Framer Motion.
 - Navigation between trip creation, details, and profile pages.
-- Blockchain-Secured Documents
+-  **AI Budget Optimizer**: Live expense logger, category breakdown graphs, savings recommendations, spending pace tracking, and automatic multi-currency conversion.
+- **AI Packing Assistant**: Fully personalized packing checklists generated based on destination, expected weather, planned activities, transit modes, and airline baggage limits.
+- **AI Travel Eligibility & Readiness Engine**: Cross-references stored documents (Passports, Visas, Insurance, Vaccines) with upcoming trip criteria to calculate Travel Readiness and Immigration Confidence Scores.
+- **AI OCR Document Scanner**: Autofills document creation and edit forms on upload using Bedrock document intelligence.
+- **AI Travel Risk Radar**: Real-time geopolitical unrest checks, weather/seismic alerts, health outbreak bulletins, custom scam risk meters, emergency hotlines, and local caution zones.
+- **AI Travel Concierge (Aria)**: A 24/7 intelligent travel assistant providing contextualized support (dining, transit, accommodations, sights) tailored directly to your selected trip destinations, companions, budget, and activities.
 
 ## Technologies
 - **Frontend**:
