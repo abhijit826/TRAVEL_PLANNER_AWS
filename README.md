@@ -92,6 +92,7 @@ This document provides a comprehensive overview of the TravelAI system architect
 ## 1. System Architecture
 
 The following diagram illustrates the end-to-end architecture of the TravelAI application:
+<img width="1337" height="893" alt="image" src="https://github.com/user-attachments/assets/243ad98f-6d7d-42e9-bbe4-37ef19788d87" />
 
 <img width="1017" height="906" alt="image" src="https://github.com/user-attachments/assets/de066e31-c26e-41b7-8d30-ef5409b39014" />
 
